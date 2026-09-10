@@ -10,7 +10,7 @@
 
 **Spec:** [设计草案](../specs/2026-09-10-yachiyo-mvp-design.md)
 
-**状态：** 用户已批准计划，并要求前端使用 JavaScript。2026-09-10 已完成 Task 1 的工程、运行验证与学习说明，等待用户体验和修改练习；尚未开始 Task 2。
+**状态：** 2026-09-10 已完成 Task 3：真实模型、四种表情、4K 运行资源、重试与资源清理，以及第三步学习说明。JavaScript 4 个测试、Rust 2 个测试、格式检查与前端构建通过；桌面验证了文件缺失和 PNG 损坏后的恢复。当前交给用户阅读与练习，尚未开始 Task 4。
 
 **执行方式：** 选择 executing-plans，在当前对话逐阶段结对完成。每阶段先解释目标，完成后演示、讲解、交给用户做一个小修改。此任务以用户学习和掌握代码为目标，不采用并行分派，也不自动连续完成六阶段。
 
@@ -18,7 +18,7 @@
 
 - 第一版仅支持 Windows 桌面。
 - 技术栈固定为 Rust + Tauri 2 + Vue 3 + JavaScript。
-- 新工程位于工作区的 app/；BongoCat/ 保留为参考源码，yachiyo/ 保留为原始模型资源。
+- 新工程位于工作区的 app/；.gitignore/BongoCat/ 保留为参考源码，yachiyo/ 保留为原始模型资源。
 - 第一版仅创建一个 main 桌宠窗口，不常驻第二个设置窗口。
 - 角色固定为八千代，使用现有 .moc3、模型配置、物理配置和四个表情。
 - 不重新实现 Live2D 渲染器，使用 PixiJS 8 + easy-live2d 及兼容的 Cubism Core。
@@ -50,7 +50,7 @@
 
 ```text
 D:/AnChiProject/yachiyodesktop/
-├─ BongoCat/                         参考工程
+├─ .gitignore/BongoCat/                         参考工程
 ├─ yachiyo/                          原始模型
 ├─ app/
 │  ├─ package.json                  pnpm 脚本和前端依赖
@@ -125,7 +125,7 @@ pnpm tauri dev
 
 - [x] 验收：实际桌面窗口启动；按钮从 0 增至 1；修改 Vue 标题后热更新且计数保留；恢复文案；Ctrl+C 后桌宠进程和窗口退出。pnpm build、cargo fmt --check 通过。
 - [x] 创建 [第一步学习说明](../../learning/01-startup.md)，说明两条启动链、文件职责、开发命令与环境配置。
-- [ ] 用户学习练习：修改一句文案和一个按钮颜色，体验 main.rs → lib.rs、index.html → main.js → App.vue 两条启动链。本阶段在这里交给用户体验。
+- [x] 用户已确认理解两条启动链和本地库，并要求进入第二阶段。修改文案和颜色的练习保留在第一步说明中，可随时回看。
 
 ## Task 2：完整体验 Vue ↔ Rust 通信
 
@@ -143,7 +143,7 @@ export const PET_EXPRESSIONS = ['smile', 'squint', 'tears', 'teardrop']
 // Event：pet-expression-requested，载荷示例：{ name: 'smile' }
 ```
 
-- [ ] 先为 Rust 白名单校验编写两个有实际意义的测试：现有表情通过，未知表情被拒绝。运行失败后补齐校验函数。
+- [x] 先为 Rust 白名单校验编写两个有实际意义的测试：现有表情通过，未知表情被拒绝。观察到未知表情测试失败，补齐校验后两个测试通过，同时覆盖空字符串、大小写和空格不匹配。
 
 ```rust
 #[test]
@@ -162,7 +162,7 @@ fn rejects_unknown_expression() {
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-- [ ] 在 expression.rs 中定义 validate_expression(name: &str) -> Result<(), String>；仅允许四个既有名称，错误文字为“未知表情: 名称”。commands.rs 中实现并注册以下命令。校验失败时不发送事件。
+- [x] 在 expression.rs 中定义 validate_expression(name: &str) -> Result<(), String>；仅允许四个既有名称，错误文字为“未知表情: 名称”。commands.rs 中实现并注册以下命令。校验失败时不发送事件。
 
 ```rust
 use serde::Serialize;
@@ -182,7 +182,7 @@ pub fn request_expression(app: tauri::AppHandle, name: String) -> Result<(), Str
 }
 ```
 
-- [ ] 在 api/pet.js 中集中封装通信。组件不散落命令字符串。
+- [x] 在 api/pet.js 中集中封装通信。组件不散落命令字符串。
 
 ```javascript
 import { invoke } from '@tauri-apps/api/core'
@@ -197,10 +197,11 @@ export const onExpressionRequested = handler =>
   })
 ```
 
-- [ ] 在 usePet.js 中先 await 事件订阅成功，再启用面板按钮；组件卸载时调用返回的 unlisten。若订阅尚未完成就卸载，在异步完成时立即取消该订阅。用 try/catch 展示错误，防止未处理的 Promise。
-- [ ] 面板分别显示“请求已发送”和“收到 Rust 事件：smile”，明确命令成功返回与事件到达是两件事。此时尚未加载 Live2D。
-- [ ] 验收：点击微笑只产生一次接收记录；故意传 unknown 能看到错误，且没有成功事件。Rust println! 在运行 cargo 的终端观察，console.log 在 WebView DevTools 观察。
-- [ ] 学习练习：用户修改 Rust 返回的错误文字，观察桌面应用重新编译，再在 Vue 中调整错误提示的显示方式。记录参数名不一致、未注册命令、监听未就绪三个排查入口。
+- [x] 在 usePet.js 中先 await 事件订阅成功，再启用面板按钮；组件卸载时调用返回的 unlisten。若订阅尚未完成就卸载，在异步完成时立即取消该订阅。用 try/catch 展示错误，取消订阅失败记录日志，防止未处理的 Promise。
+- [x] 面板分别显示“请求已发送”和“收到 Rust 事件：smile”，明确命令成功返回与事件到达是两件事。面板仅开发模式可见，此时尚未加载 Live2D。
+- [x] 验收：用户手动点击微笑和 unknown 并确认符合预期；助手读取到“收到 Rust 事件：smile”“共 1 次”“未知表情: unknown”，终端记录了两次 Rust 请求。Rust println! 在开发终端查看，console.log 的 DevTools 查看方法已写入学习说明。桌面自动化点击受工具保护拦截，本次点击由用户完成。
+- [x] 创建 [第二步学习说明](../../learning/02-bridge.md)，讲解 Rust 语法、完整调用链和参数名不一致、未注册命令、监听未就绪三个排查入口。
+- [ ] 用户学习练习：修改 Rust 返回的错误文字，观察桌面应用重新编译，再在 Vue 中调整错误提示的显示方式。
 
 ## Task 3：加载八千代，并让通信控制真实表情
 
@@ -221,21 +222,23 @@ export const onExpressionRequested = handler =>
 // destroy()：释放资源。
 ```
 
-- [ ] 仅复制 .moc3、model3.json、physics3.json、cdi3.json、四个 exp3.json 到分发资源目录；保留相对贴图路径。原始 yachiyo/ 不覆盖。
-- [ ] 为两张贴图分别生成 4K RGBA 副本。以下命令从工作区根目录运行，输出目录先创建，不覆盖输入文件：
+- [x] 仅复制 .moc3、model3.json、physics3.json、cdi3.json、四个 exp3.json 到分发资源目录；保留相对贴图路径。原始 yachiyo/ 不覆盖。
+- [x] 为两张贴图分别生成 4K RGBA 副本。以下命令从工作区根目录运行，输出目录先创建，不覆盖输入文件：
 
 ```powershell
 ffmpeg -n -i ./yachiyo/yachiyo.8192/texture_00.png -vf "scale=4096:4096:flags=lanczos,format=rgba" -frames:v 1 ./app/src-tauri/assets/models/yachiyo/yachiyo.8192/texture_00.png
 ffmpeg -n -i ./yachiyo/yachiyo.8192/texture_01.png -vf "scale=4096:4096:flags=lanczos,format=rgba" -frames:v 1 ./app/src-tauri/assets/models/yachiyo/yachiyo.8192/texture_01.png
 ```
 
-- [ ] 核实 BongoCat 使用的 PixiJS 8 / easy-live2d 0.4 系列组合，锁定实际使用版本。检查 Core 对该 .moc3 的兼容性；使用匹配的官方 Core。模型是 Cubism 3+ 格式，暂不引入旧 Cubism 2 的运行链路。
-- [ ] 参考 BongoCat 的 load 流程：resolveResource 获取打包资源目录、读取固定 yachiyo.model3.json、CubismSetting.redirectPath + convertFileSrc 解析关联文件、创建 Live2DSprite、等待 ready。文件读取与 asset scope 只覆盖模型资源目录。
-- [ ] 创建一个 Pixi Application，将其 ticker 传给 Live2DSprite，更新与绘制共用该 ticker；从本阶段开始限为 30 FPS。初始渲染分辨率系数使用 1，按实际清晰度评估，不直接跟随所有高 DPI 倍率。
-- [ ] 事件到达后，按模型配置的 Name 查找表情再调用 setExpression，避免写死数字下标。模型未就绪时只保留最后一个表情请求；加载完成后应用一次。
-- [ ] 检查运行库的自动眨眼/呼吸能力。若自动呼吸没有驱动本模型，则在同一个 ticker 中驱动 ParamBreath，不另外创建定时器；先关闭相同参数的重复驱动。没有动作文件，不把播放 Idle motion 作为本阶段前提。
-- [ ] 验收：四个表情能切换；透明纹理边缘正常；缺少模型文件时显示路径与错误，能够重试或退出；卸载组件后不重复加载实例。对比 4K 与原始模型的脸部细节，决定是否值得另测 2K。
+- [x] 核实 BongoCat 使用的 PixiJS 8 / easy-live2d 0.4 系列组合，锁定实际使用版本。检查 Core 对该 .moc3 的兼容性；使用匹配的官方 Core。模型是 Cubism 3+ 格式，暂不引入旧 Cubism 2 的运行链路。
+- [x] 参考 BongoCat 的 load 流程：resolveResource 获取打包资源目录、读取固定 yachiyo.model3.json、CubismSetting.redirectPath + convertFileSrc 解析关联文件、创建 Live2DSprite、等待 ready。文件读取与 asset scope 只覆盖模型资源目录。
+- [x] 创建一个 Pixi Application，将其 ticker 传给 Live2DSprite，更新与绘制共用该 ticker；从本阶段开始限为 30 FPS。初始渲染分辨率系数使用 1，按实际清晰度评估，不直接跟随所有高 DPI 倍率。
+- [x] 事件到达后，按模型配置的 Name 查找表情再调用 setExpression，避免写死数字下标。模型未就绪时只保留最后一个表情请求；加载完成后应用一次。
+- [x] 检查运行库的自动眨眼/呼吸能力。若自动呼吸没有驱动本模型，则在同一个 ticker 中驱动 ParamBreath，不另外创建定时器；先关闭相同参数的重复驱动。没有动作文件，不把播放 Idle motion 作为本阶段前提。
+- [x] 验收：四个表情能切换；透明纹理边缘正常；缺少模型文件时显示路径与错误，能够重试或退出；卸载组件后不重复加载实例。对比 4K 与原始模型的脸部细节，决定是否值得另测 2K。
 - [ ] 学习练习：用户修改角色显示尺寸，并沿 DevPanel → api/pet.js → commands.rs → 事件监听 → controller.js 追踪一次真实表情变化。
+
+**实现说明：** 使用 easy-live2d 0.4.4、PixiJS 8.20.1、原有 Cubism Core 5.1.0（实际验证支持模型的 Moc 版本 5）。依赖补丁补齐加载错误传播与底层模型释放；重试创建新 Canvas，避免复用已释放的 WebGL 上下文。使用 Node 内置测试运行器测试模型路径、表情映射和布局。4K/8K 在当前显示尺寸下未见明显脸部差异，暂不继续制作 2K。详情见 [第三步学习说明](../../learning/03-model.md)。
 
 ## Task 4：透明桌宠窗口与原生托盘
 
@@ -356,9 +359,9 @@ pnpm tauri build --bundles nsis
 
 ## 参考入口
 
-- 本地 BongoCat/src/utils/live2d.ts：资源加载和模型封装。
-- 本地 BongoCat/src-tauri/src/lib.rs：Tauri 应用入口与命令注册。
-- 本地 BongoCat/src/composables/useDevice.ts：invoke 与事件监听示例；本项目不复用其全局输入业务。
+- 本地 .gitignore/BongoCat/src/utils/live2d.ts：资源加载和模型封装。
+- 本地 .gitignore/BongoCat/src-tauri/src/lib.rs：Tauri 应用入口与命令注册。
+- 本地 .gitignore/BongoCat/src/composables/useDevice.ts：invoke 与事件监听示例；本项目不复用其全局输入业务。
 - [Tauri：前端调用 Rust](https://v2.tauri.app/develop/calling-rust/)
 - [Tauri：Rust 通知前端](https://v2.tauri.app/develop/calling-frontend/)
 - [easy-live2d 文档](https://panzer-jack.github.io/easy-live2d/en/)

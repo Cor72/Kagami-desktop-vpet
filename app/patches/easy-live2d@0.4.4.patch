@@ -1,0 +1,196 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..fc7da963e54f94f107bf992032d36bc37d998530 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -5474,7 +5474,7 @@ var FileLoader = class {
+     } catch (error) {
+       console.error(`Failed to fetch: ${url}`, error);
+     }
+-    return new ArrayBuffer(0);
++    throw new Error(`Failed to load model asset: ${url}`);
+   }
+ };
+ var EMPTY_REDIR = {
+@@ -5505,6 +5505,7 @@ var ModelLoader = class {
+       model.setReady(true);
+     } catch (error) {
+       CubismLogError(`Failed to load model: ${error}`);
++      throw error;
+     }
+   }
+   async resolveSetting(assets) {
+@@ -5584,11 +5585,11 @@ var ModelLoader = class {
+       if (!fileName)
+         continue;
+       const url = hasRedir && ctx.redir.Textures[i] || `${ctx.homeDir}${fileName}`;
+-      promises.push(new Promise((resolve) => {
++      promises.push(new Promise((resolve, reject) => {
+         textureLoader.createTextureFromPngFile(url, true, (info) => {
+           model.bindTexture(i, info.id);
+           resolve();
+-        });
++        }, reject);
+       }));
+     }
+     await Promise.all(promises);
+@@ -5608,7 +5609,7 @@ var TextureLoader = class {
+   constructor(webgl) {
+     this._webgl = webgl;
+   }
+-  createTextureFromPngFile(fileName, usePremultiply, callback) {
++  createTextureFromPngFile(fileName, usePremultiply, callback, onError) {
+     const cached = this._textures.find(
+       (t) => t.fileName === fileName && t.usePremultiply === usePremultiply
+     );
+@@ -5617,6 +5618,7 @@ var TextureLoader = class {
+       if (Config.crossOrigin !== void 0)
+         cached.img.crossOrigin = Config.crossOrigin;
+       cached.img.addEventListener("load", () => callback(cached), { passive: true });
++      cached.img.addEventListener("error", () => onError?.(new Error(`Failed to load texture: ${fileName}`)), { once: true });
+       cached.img.src = fileName;
+       return;
+     }
+@@ -5627,6 +5629,7 @@ var TextureLoader = class {
+       const textureInfo = this.createGlTexture(img, fileName, usePremultiply);
+       callback(textureInfo);
+     }, { passive: true });
++    img.addEventListener("error", () => onError?.(new Error(`Failed to load texture: ${fileName}`)), { once: true });
+     img.src = fileName;
+   }
+   createGlTexture(img, fileName, usePremultiply) {
+@@ -14649,6 +14652,7 @@ var Live2DSprite = class extends pixi_js.Sprite {
+   _readyPromise;
+   /** Resolver captured from the _readyPromise constructor; cleared after resolving. */
+   _readyResolve = null;
++  _readyReject = null;
+   get width() {
+     return Math.abs(this.scale.x) * this.getLocalModelWidth();
+   }
+@@ -14690,13 +14694,19 @@ var Live2DSprite = class extends pixi_js.Sprite {
+     super();
+     this._ctx = new Live2DContext();
+     this.renderable = false;
+-    this._readyPromise = new Promise((resolve) => {
++    this._readyPromise = new Promise((resolve, reject) => {
+       this._readyResolve = resolve;
++      this._readyReject = reject;
+     });
+     if (initConfig)
+       this.init(initConfig);
+     this.onRender = (renderer) => {
+-      void this.renderFrame(renderer);
++      void this.renderFrame(renderer).catch((error) => {
++        this.onRender = null;
++        this._readyReject?.(error);
++        this._readyReject = null;
++        console.error(error);
++      });
+     };
+   }
+   init(config) {
+@@ -14862,6 +14872,7 @@ var Live2DSprite = class extends pixi_js.Sprite {
+     this._pointerHandler?.detach();
+     this._resizeObserver?.disconnect();
+     this._textureLoader?.release();
++    this._model?.release();
+     this._model = null;
+     this._ctx.dispose();
+     if (this._cubismInitialized) {
+diff --git a/dist/index.js b/dist/index.js
+index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..59cbf3781917fc10d0288c71697ef9b551644624 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5472,7 +5472,7 @@ var FileLoader = class {
+     } catch (error) {
+       console.error(`Failed to fetch: ${url}`, error);
+     }
+-    return new ArrayBuffer(0);
++    throw new Error(`Failed to load model asset: ${url}`);
+   }
+ };
+ var EMPTY_REDIR = {
+@@ -5503,6 +5503,7 @@ var ModelLoader = class {
+       model.setReady(true);
+     } catch (error) {
+       CubismLogError(`Failed to load model: ${error}`);
++      throw error;
+     }
+   }
+   async resolveSetting(assets) {
+@@ -5582,11 +5583,11 @@ var ModelLoader = class {
+       if (!fileName)
+         continue;
+       const url = hasRedir && ctx.redir.Textures[i] || `${ctx.homeDir}${fileName}`;
+-      promises.push(new Promise((resolve) => {
++      promises.push(new Promise((resolve, reject) => {
+         textureLoader.createTextureFromPngFile(url, true, (info) => {
+           model.bindTexture(i, info.id);
+           resolve();
+-        });
++        }, reject);
+       }));
+     }
+     await Promise.all(promises);
+@@ -5606,7 +5607,7 @@ var TextureLoader = class {
+   constructor(webgl) {
+     this._webgl = webgl;
+   }
+-  createTextureFromPngFile(fileName, usePremultiply, callback) {
++  createTextureFromPngFile(fileName, usePremultiply, callback, onError) {
+     const cached = this._textures.find(
+       (t) => t.fileName === fileName && t.usePremultiply === usePremultiply
+     );
+@@ -5615,6 +5616,7 @@ var TextureLoader = class {
+       if (Config.crossOrigin !== void 0)
+         cached.img.crossOrigin = Config.crossOrigin;
+       cached.img.addEventListener("load", () => callback(cached), { passive: true });
++      cached.img.addEventListener("error", () => onError?.(new Error(`Failed to load texture: ${fileName}`)), { once: true });
+       cached.img.src = fileName;
+       return;
+     }
+@@ -5625,6 +5627,7 @@ var TextureLoader = class {
+       const textureInfo = this.createGlTexture(img, fileName, usePremultiply);
+       callback(textureInfo);
+     }, { passive: true });
++    img.addEventListener("error", () => onError?.(new Error(`Failed to load texture: ${fileName}`)), { once: true });
+     img.src = fileName;
+   }
+   createGlTexture(img, fileName, usePremultiply) {
+@@ -14647,6 +14650,7 @@ var Live2DSprite = class extends Sprite {
+   _readyPromise;
+   /** Resolver captured from the _readyPromise constructor; cleared after resolving. */
+   _readyResolve = null;
++  _readyReject = null;
+   get width() {
+     return Math.abs(this.scale.x) * this.getLocalModelWidth();
+   }
+@@ -14688,13 +14692,19 @@ var Live2DSprite = class extends Sprite {
+     super();
+     this._ctx = new Live2DContext();
+     this.renderable = false;
+-    this._readyPromise = new Promise((resolve) => {
++    this._readyPromise = new Promise((resolve, reject) => {
+       this._readyResolve = resolve;
++      this._readyReject = reject;
+     });
+     if (initConfig)
+       this.init(initConfig);
+     this.onRender = (renderer) => {
+-      void this.renderFrame(renderer);
++      void this.renderFrame(renderer).catch((error) => {
++        this.onRender = null;
++        this._readyReject?.(error);
++        this._readyReject = null;
++        console.error(error);
++      });
+     };
+   }
+   init(config) {
+@@ -14860,6 +14870,7 @@ var Live2DSprite = class extends Sprite {
+     this._pointerHandler?.detach();
+     this._resizeObserver?.disconnect();
+     this._textureLoader?.release();
++    this._model?.release();
+     this._model = null;
+     this._ctx.dispose();
+     if (this._cubismInitialized) {

@@ -19,14 +19,14 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 24px;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 16px;
 }
 
 h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 600;
   letter-spacing: 2px;
 }
@@ -41,11 +41,147 @@ button {
   cursor: pointer;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: #5d4275;
 }
 
 button:focus-visible {
   outline: 3px solid #b19bc3;
   outline-offset: 4px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.dev-panel {
+  width: 100%;
+  max-width: 360px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.connection {
+  margin: 8px 0 16px;
+  color: #655d6c;
+  font-size: 13px;
+}
+
+.expression-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.expression-buttons button {
+  padding: 10px 4px;
+  font-size: 14px;
+}
+
+.pet-view {
+  width: 100%;
+  max-width: 540px;
+}
+
+.pet-stage {
+  position: relative;
+  height: 380px;
+  background: #efebf1;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.pet-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.stage-message {
+  position: absolute;
+  inset: 0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #efebf1;
+  font-size: 13px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.stage-message p {
+  margin: 0;
+}
+
+.stage-message code {
+  max-width: 100%;
+  font-size: 11px;
+}
+
+.model-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #655d6c;
+}
+
+.text-button {
+  padding: 4px 6px;
+  font-size: 12px;
+  background: transparent;
+  color: #65457d;
+}
+
+.text-button:hover:not(:disabled) {
+  background: #eee6f3;
+}
+
+.secondary {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #cdbfd8;
+  background: transparent;
+  color: #65457d;
+  font-size: 14px;
+}
+
+.secondary:hover:not(:disabled) {
+  background: #eee6f3;
+}
+
+.bridge-status {
+  margin: 20px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.bridge-status div + div {
+  margin-top: 14px;
+}
+
+dt {
+  color: #655d6c;
+  font-size: 12px;
+}
+
+dd {
+  margin: 5px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.error {
+  margin: 14px 0 0;
+  color: #a33142;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }

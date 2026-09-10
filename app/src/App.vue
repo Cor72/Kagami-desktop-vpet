@@ -1,15 +1,18 @@
 <script setup>
-import { ref } from 'vue'
+import DevPanel from './components/DevPanel.vue'
+import PetStage from './components/PetStage.vue'
+import { usePet } from './composables/usePet.js'
 
-// 第一阶段：计数只存在于 Vue 中，关闭窗口后会重置。
-const count = ref(0)
+// 事件订阅属于整个应用，发布版也要接收 Rust 发来的表情事件。
+const pet = usePet()
+const { expressionRequest } = pet
+const isDev = import.meta.env.DEV
 </script>
 
 <template>
   <main>
     <h1>八千代桌宠</h1>
-    <button type="button" @click="count++">
-      <span aria-live="polite">点击了 {{ count }} 次</span>
-    </button>
+    <PetStage :expression-request="expressionRequest" />
+    <DevPanel v-if="isDev" :pet="pet" />
   </main>
 </template>

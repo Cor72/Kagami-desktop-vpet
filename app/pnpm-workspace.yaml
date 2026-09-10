@@ -1,0 +1,2 @@
+patchedDependencies:
+  easy-live2d@0.4.4: patches/easy-live2d@0.4.4.patch

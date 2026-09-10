@@ -1,6 +1,6 @@
 # 八千代桌宠最小实现：设计草案
 
-日期：2026-09-10。状态：用户已批准最小实现计划，要求前端使用 JavaScript，并开始第一阶段。
+日期：2026-09-10。状态：用户已批准最小实现计划，前端使用 JavaScript；已完成前三阶段，当前交给用户阅读模型接入代码和体验。
 
 ## 已确认的目标
 
@@ -10,7 +10,7 @@
 
 - 第一版仅支持 Windows 桌面。
 - 技术栈固定为 Rust + Tauri 2 + Vue 3 + JavaScript。
-- 新工程位于工作区的 app/；BongoCat/ 保留为参考源码，yachiyo/ 保留为原始模型资源。
+- 新工程位于工作区的 app/；.gitignore/BongoCat/ 保留为参考源码，yachiyo/ 保留为原始模型资源。
 - 第一版仅创建一个 main 桌宠窗口，不常驻第二个设置窗口。
 - 角色固定为八千代，使用现有 .moc3、模型配置、物理配置和四个表情。
 - 不重新实现 Live2D 渲染器，使用 PixiJS 8 + easy-live2d 及兼容的 Cubism Core。
@@ -41,10 +41,10 @@ Vue 组织页面，JavaScript 的 Live2D 模块管理模型和渲染循环，Rus
 
 ## 已检查的资源与环境
 
-- 本地 BongoCat/package.json 声明版本 1.1.0，使用 Tauri 2、Vue 3、PixiJS 8、easy-live2d 0.4 系列。
+- 本地 .gitignore/BongoCat/package.json 声明版本 1.1.0，使用 Tauri 2、Vue 3、PixiJS 8、easy-live2d 0.4 系列。
 - yachiyo 模型引用两张 8192×8192 PNG；按 RGBA8 计算，基础纹理数据合计 512 MiB。各缩至 4096×4096 后为 128 MiB，非实测内存。
 - 原始资源包含四个表情，没有 .motion3.json 动作文件。
-- 参数说明中存在 ParamBreath、ParamEyeLOpen、ParamEyeROpen、ParamMouthOpenY；基础待机仍需实际检查运行库行为。
+- 参数说明中存在 ParamBreath、ParamEyeLOpen、ParamEyeROpen、ParamMouthOpenY；已检查运行库的眨眼、呼吸和物理更新，并在实际桌面窗口观察到待机表现。
 - 用户已完成 Rust 安装：rustc/cargo 1.98.1，stable-x86_64-pc-windows-msvc。旧终端需要刷新 PATH，新终端可以直接调用 cargo。
 - 已核实 Node 24.19.0、pnpm、MSVC C++ 构建工具、Windows SDK、WebView2 Runtime；第一阶段的 Tauri 编译和桌面窗口运行已通过。
 
@@ -56,4 +56,4 @@ Vue 组织页面，JavaScript 的 Live2D 模块管理模型和渲染循环，Rus
 
 ## 当前执行范围
 
-本次只执行第一阶段：补齐环境，创建普通窗口与 Vue 计数页面，验证启动、交互和热更新。模型接入、图片处理、双向通信与后续桌宠能力按计划逐步开展。
+第三阶段已完成：模型加载、4K 贴图、真实表情、加载失败重试与生命周期清理。当前普通窗口用于学习和联调；透明窗口与托盘是下一阶段，常驻性能尚未实测。

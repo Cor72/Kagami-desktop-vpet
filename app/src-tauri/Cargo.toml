@@ -10,4 +10,6 @@ name = "yachiyo_desktop_lib"
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "=2.11.3", features = [] }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "=2.11.3", features = ["protocol-asset"] }
+tauri-plugin-fs = "=2.5.2"
