@@ -1,5 +1,9 @@
 import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
-import { onExpressionRequested, requestExpression } from '../api/pet.js'
+import {
+  getPetSettings, onExpressionRequested, onPetDesktopError, onPetSettingsChanged,
+  quitPet, requestExpression, setPetAlwaysOnTop, setPetMaxFps, setPetVisible,
+} from '../api/pet.js'
+import { latestSettings } from './petSettings.js'
 
 export function usePet() {
   const ready = ref(false)
@@ -9,9 +13,15 @@ export function usePet() {
   const receivedCount = ref(0)
   const expressionRequest = shallowRef(null)
   const error = ref('')
+  const settings = shallowRef(null)
+  const settingsBusy = ref(false)
 
   let disposed = false
-  let unlisten
+  const unlisteners = []
+
+  function acceptSettings(snapshot) {
+    if (!disposed) settings.value = latestSettings(settings.value, snapshot)
+  }
 
   async function stopListener(stop) {
     try {
@@ -24,28 +34,35 @@ export function usePet() {
 
   onMounted(async () => {
     try {
-      const stopListening = await onExpressionRequested(name => {
-        if (disposed) return
+      const subscriptions = [
+        () => onExpressionRequested(name => {
+          if (disposed) return
 
-        // 收到事件才更新这里；invoke 成功不会修改事件记录。
-        lastExpression.value = name
-        receivedCount.value++
-        // 每次事件都创建新对象，同一个表情连续点击也会通知模型。
-        expressionRequest.value = { name, sequence: receivedCount.value }
-        console.log('[Vue] 收到 Rust 事件:', name)
-      })
-
-      // 订阅是异步的，组件可能在订阅完成前就已被卸载。
-      if (disposed) {
-        await stopListener(stopListening)
-        return
+          // 收到事件才更新这里；invoke 成功不会修改事件记录。
+          lastExpression.value = name
+          receivedCount.value++
+          // 每次事件都创建新对象，同一个表情连续点击也会通知模型。
+          expressionRequest.value = { name, sequence: receivedCount.value }
+          console.log('[Vue] 收到 Rust 事件:', name)
+        }),
+        () => onPetSettingsChanged(acceptSettings),
+        () => onPetDesktopError(message => { if (!disposed) error.value = message }),
+      ]
+      for (const subscribe of subscriptions) {
+        const stopListening = await subscribe()
+        // 订阅是异步的，组件可能在订阅完成前就已被卸载。
+        if (disposed) {
+          await stopListener(stopListening)
+          return
+        }
+        unlisteners.push(stopListening)
       }
-
-      unlisten = stopListening
-      ready.value = true
+      // 先监听，再读取；较旧的初始快照不能覆盖期间到达的新事件。
+      acceptSettings(await getPetSettings())
+      if (!disposed) ready.value = true
     } catch (cause) {
       if (!disposed) {
-        error.value = `事件订阅失败：${String(cause)}。请通过 pnpm tauri dev 启动桌面应用。`
+        error.value = `桌宠通信初始化失败：${String(cause)}。请通过 pnpm tauri dev 启动桌面应用。`
       }
     }
   })
@@ -53,7 +70,7 @@ export function usePet() {
   onUnmounted(() => {
     disposed = true
     ready.value = false
-    void stopListener(unlisten)
+    for (const unlisten of unlisteners) void stopListener(unlisten)
   })
 
   async function sendExpression(name) {
@@ -76,5 +93,29 @@ export function usePet() {
     }
   }
 
-  return { ready, sending, requestStatus, lastExpression, receivedCount, expressionRequest, error, sendExpression }
+  async function changeSettings(command) {
+    if (!ready.value || settingsBusy.value) return
+    settingsBusy.value = true
+    error.value = ''
+    try {
+      acceptSettings(await command())
+    } catch (cause) {
+      if (!disposed) error.value = String(cause)
+    } finally {
+      if (!disposed) settingsBusy.value = false
+    }
+  }
+
+  async function quit() {
+    try { await quitPet() }
+    catch (cause) { if (!disposed) error.value = String(cause) }
+  }
+
+  return {
+    ready, sending, requestStatus, lastExpression, receivedCount, expressionRequest, error, sendExpression,
+    settings, settingsBusy, quit,
+    setVisible: visible => changeSettings(() => setPetVisible(visible)),
+    setMaxFps: fps => changeSettings(() => setPetMaxFps(fps)),
+    setAlwaysOnTop: enabled => changeSettings(() => setPetAlwaysOnTop(enabled)),
+  }
 }

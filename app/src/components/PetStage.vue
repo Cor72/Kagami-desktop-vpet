@@ -2,8 +2,13 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { resolveResource } from '@tauri-apps/api/path'
 import { createPetController } from '../live2d/controller.js'
+import { startPetDragging } from '../api/pet.js'
 
-const props = defineProps({ expressionRequest: { type: Object, default: null } })
+const props = defineProps({
+  expressionRequest: { type: Object, default: null },
+  settings: { type: Object, default: null },
+})
+const emit = defineEmits(['error'])
 const canvas = ref(null)
 const canvasKey = ref(0)
 const stage = ref(null)
@@ -54,6 +59,7 @@ async function loadModel() {
       return
     }
     controller = next
+    controller.setMaxFps(props.settings?.maxFps ?? 30)
     await applyLatestExpression()
   } catch (cause) {
     if (!disposed) error.value = String(cause)
@@ -64,6 +70,14 @@ async function loadModel() {
 
 // 加载中只保留 props 中最新的请求；就绪后应用一次，不积压旧表情。
 watch(() => props.expressionRequest, applyLatestExpression)
+watch(() => props.settings?.maxFps, fps => {
+  if (fps) controller?.setMaxFps(fps)
+})
+
+async function dragWindow() {
+  try { await startPetDragging() }
+  catch (cause) { emit('error', `拖动窗口失败：${String(cause)}`) }
+}
 
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
@@ -85,7 +99,7 @@ onUnmounted(() => {
 <template>
   <section class="pet-view" aria-label="八千代模型">
     <div ref="stage" class="pet-stage">
-      <canvas :key="canvasKey" ref="canvas" aria-label="八千代 Live2D 模型" />
+      <canvas :key="canvasKey" ref="canvas" aria-label="八千代 Live2D 模型，按住拖动" @mousedown.left.prevent="dragWindow" />
       <div v-if="loading || error" class="stage-message" :role="error ? 'alert' : 'status'">
         <p>{{ loading ? '正在加载八千代…' : '模型加载或表情切换失败' }}</p>
         <template v-if="error">
@@ -95,9 +109,9 @@ onUnmounted(() => {
         </template>
       </div>
     </div>
-    <div class="model-toolbar">
+    <div v-if="isDev" class="model-toolbar hover-controls">
       <span role="status">
-        {{ loading ? '加载中' : error ? '请检查上方错误' : `模型已就绪 · 30 FPS${appliedExpression ? ` · ${appliedExpression}` : ''}` }}
+        {{ loading ? '加载中' : error ? '请检查上方错误' : `已就绪 · 上限 ${settings?.maxFps ?? 30} FPS${appliedExpression ? ` · ${appliedExpression}` : ''}` }}
       </span>
       <button v-if="isDev" class="text-button" type="button" :disabled="loading" @click="loadModel">重新加载</button>
     </div>

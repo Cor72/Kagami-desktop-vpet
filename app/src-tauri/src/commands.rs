@@ -1,4 +1,8 @@
 use crate::expression::validate_expression;
+use crate::{
+    desktop,
+    settings::{PetSettings, SettingsChange},
+};
 use serde::Serialize;
 use tauri::Emitter;
 
@@ -6,6 +10,31 @@ use tauri::Emitter;
 #[derive(Clone, Serialize)]
 pub struct ExpressionRequested {
     pub name: String,
+}
+
+#[tauri::command]
+pub fn get_pet_settings(app: tauri::AppHandle) -> Result<PetSettings, String> {
+    desktop::get_settings(&app)
+}
+
+#[tauri::command]
+pub fn set_pet_visible(app: tauri::AppHandle, visible: bool) -> Result<PetSettings, String> {
+    desktop::update_settings(&app, SettingsChange::Visible(visible))
+}
+
+#[tauri::command]
+pub fn set_pet_max_fps(app: tauri::AppHandle, max_fps: u32) -> Result<PetSettings, String> {
+    desktop::update_settings(&app, SettingsChange::MaxFps(max_fps))
+}
+
+#[tauri::command]
+pub fn set_pet_always_on_top(app: tauri::AppHandle, enabled: bool) -> Result<PetSettings, String> {
+    desktop::update_settings(&app, SettingsChange::AlwaysOnTop(enabled))
+}
+
+#[tauri::command]
+pub fn quit_pet(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]

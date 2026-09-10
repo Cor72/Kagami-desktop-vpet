@@ -5,6 +5,7 @@ const labels = { smile: '微笑', squint: '眯眼', tears: '泪眼', teardrop: '
 // 状态由 App.vue 创建并共享，面板和模型不重复注册事件监听。
 const props = defineProps({ pet: { type: Object, required: true } })
 const { ready, sending, requestStatus, lastExpression, receivedCount, error, sendExpression } = props.pet
+const { settings, settingsBusy, setMaxFps, setAlwaysOnTop } = props.pet
 </script>
 
 <template>
@@ -13,6 +14,19 @@ const { ready, sending, requestStatus, lastExpression, receivedCount, error, sen
     <p class="connection" role="status">
       {{ ready ? '事件监听已就绪' : error ? '事件监听未就绪' : '等待事件监听就绪…' }}
     </p>
+    <div v-if="settings" class="settings-controls">
+      <label>
+        <input type="checkbox" :checked="settings.alwaysOnTop" :disabled="settingsBusy" @change="setAlwaysOnTop($event.target.checked)">
+        保持置顶
+      </label>
+      <label>帧率
+        <select :value="settings.maxFps" :disabled="settingsBusy" @change="setMaxFps(Number($event.target.value))">
+          <option :value="30">30 FPS</option>
+          <option :value="15">15 FPS</option>
+        </select>
+      </label>
+      <small>设置版本 {{ settings.revision }} · {{ settings.visible ? '显示' : '隐藏' }}</small>
+    </div>
 
     <div class="expression-buttons">
       <button

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port 1420 --strictPort",
     "build": "vite build",
-    "test": "node --test src/live2d/*.test.js",
+    "test": "node --test src/live2d/*.test.js src/composables/*.test.js",
     "tauri": "tauri"
   },
   "dependencies": {

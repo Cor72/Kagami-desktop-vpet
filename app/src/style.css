@@ -1,7 +1,7 @@
 :root {
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   color: #3d3545;
-  background: #faf7f2;
+  background: transparent;
   font-synthesis: none;
 }
 
@@ -9,19 +9,23 @@
   box-sizing: border-box;
 }
 
-body {
+html, body, #app {
   margin: 0;
-  min-width: 280px;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
 }
 
 main {
-  min-height: 100vh;
+  position: relative;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 14px;
-  padding: 16px;
+  gap: 4px;
+  padding: 8px;
 }
 
 h1 {
@@ -56,8 +60,14 @@ button:disabled {
 }
 
 .dev-panel {
-  width: 100%;
-  max-width: 360px;
+  position: absolute;
+  inset: 8px 8px 42px;
+  z-index: 2;
+  padding: 14px;
+  border: 1px solid #ded4e4;
+  border-radius: 14px;
+  background: #faf7f2f5;
+  overflow-y: auto;
 }
 
 h2 {
@@ -67,7 +77,7 @@ h2 {
 }
 
 .connection {
-  margin: 8px 0 16px;
+  margin: 8px 0 12px;
   color: #655d6c;
   font-size: 13px;
 }
@@ -75,7 +85,7 @@ h2 {
 .expression-buttons {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 6px;
 }
 
 .expression-buttons button {
@@ -85,14 +95,17 @@ h2 {
 
 .pet-view {
   width: 100%;
-  max-width: 540px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .pet-stage {
   position: relative;
-  height: 380px;
-  background: #efebf1;
-  border-radius: 14px;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
   overflow: hidden;
 }
 
@@ -100,6 +113,9 @@ h2 {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
 }
 
 .stage-message {
@@ -111,7 +127,8 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: #efebf1;
+  background: #faf7f2f5;
+  border-radius: 14px;
   font-size: 13px;
   overflow: auto;
   overflow-wrap: anywhere;
@@ -130,9 +147,12 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 6px;
-  font-size: 12px;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 11px;
   color: #655d6c;
+  border-radius: 8px;
+  background: #faf7f2ed;
 }
 
 .text-button {
@@ -160,12 +180,12 @@ h2 {
 }
 
 .bridge-status {
-  margin: 20px 0 0;
+  margin: 12px 0 0;
   overflow-wrap: anywhere;
 }
 
 .bridge-status div + div {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 dt {
@@ -183,5 +203,64 @@ dd {
   margin: 14px 0 0;
   color: #a33142;
   font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.window-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: #faf7f2ed;
+}
+
+.hover-controls {
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+main:hover .hover-controls,
+main:focus-within .hover-controls,
+main.panel-open .hover-controls,
+main:has(.stage-message) .hover-controls,
+main:has(.floating-error) .hover-controls {
+  opacity: 1;
+}
+
+.settings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.settings-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-controls select {
+  font: inherit;
+  padding: 3px;
+}
+
+.settings-controls small {
+  width: 100%;
+  color: #655d6c;
+}
+
+.floating-error {
+  position: absolute;
+  inset: auto 8px 44px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #faf7f2;
+  color: #a33142;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
