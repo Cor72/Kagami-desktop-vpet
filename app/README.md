@@ -1,6 +1,6 @@
 # 八千代桌宠
 
-Rust + Tauri 2 + Vue 3 + JavaScript，当前已实现第四阶段：透明无边框桌宠、Rust 托盘、显示/隐藏、置顶、表情和 30/15 FPS 设置。使用 4K 运行贴图。
+Rust + Tauri 2 + Vue 3 + JavaScript，已实现第五阶段的功能：透明无边框桌宠、Rust 托盘、表情、30/15 FPS、隐藏和最小化停更，以及恢复时钟重置。使用 4K 运行贴图。
 
 ```powershell
 cd D:\AnChiProject\yachiyodesktop\app
@@ -18,8 +18,8 @@ pnpm build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`patches/easy-live2d@0.4.4.patch` 修复当前依赖的加载错误传播、并行贴图加载失败时的清理时序和底层模型释放，由 pnpm 安装时自动应用，请保留补丁、`pnpm-workspace.yaml` 和锁文件。
+`patches/easy-live2d@0.4.4.patch` 修复当前依赖的加载错误传播、并行贴图加载失败时的清理时序、底层模型释放和动画时钟，由 pnpm 安装时自动应用，请保留补丁、`pnpm-workspace.yaml` 和锁文件。
 
-第四阶段的自动测试、构建及部分桌面操作已验证，托盘完整交互等待手动验收。主动隐藏和最小化停更、恢复时间基准以及完整常驻性能测量在第五阶段。
+继续阅读 [第五步：控制常驻开销](../docs/learning/05-performance.md) 和 [Release 实测记录](../docs/performance/2026-09-10/README.md)。30/15 FPS、隐藏、最小化各 2 分钟以及 20 次隐藏/显示已验证；连续可见待机被额外隐藏打断，用户选择将 30 分钟验收留到后续。第四阶段保留的托盘完整交互等人工验收项仍待完成。
 
 整体安排见 [六阶段实施计划](../docs/superpowers/plans/2026-09-10-yachiyo-mvp.md)。

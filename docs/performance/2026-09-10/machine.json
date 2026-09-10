@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-09-10T23:05:07.0612196+08:00",
+  "cpu": [
+    {
+      "Name": "13th Gen Intel(R) Core(TM) i5-13420H",
+      "NumberOfCores": 8,
+      "NumberOfLogicalProcessors": 12
+    }
+  ],
+  "logicalProcessors": 12,
+  "physicalMemoryBytes": 16888094720,
+  "os": "Microsoft Windows 11 家庭版 中文版",
+  "osVersion": "10.0.26200",
+  "gpu": [
+    {
+      "Name": "Intel(R) UHD Graphics",
+      "DriverVersion": "31.0.101.4502",
+      "CurrentHorizontalResolution": 1920,
+      "CurrentVerticalResolution": 1200,
+      "CurrentRefreshRate": 60
+    }
+  ],
+  "sampleIntervalSeconds": 5,
+  "cpuDefinition": "Delta total CPU seconds / wall seconds / logical processors * 100; parent plus descendant processes",
+  "workingSetDefinition": "Sum of process working sets, shared pages may be counted more than once",
+  "privateBytesDefinition": "Sum of process private committed bytes, not physical resident memory",
+  "gpuMemoryDefinition": "Sum of Windows GPU Process Memory counters for this process tree"
+}

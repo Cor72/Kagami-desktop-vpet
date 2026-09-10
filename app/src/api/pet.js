@@ -23,6 +23,9 @@ export const setPetMaxFps = maxFps => invoke('set_pet_max_fps', { maxFps })
 export const setPetAlwaysOnTop = enabled => invoke('set_pet_always_on_top', { enabled })
 export const quitPet = () => invoke('quit_pet')
 export const startPetDragging = () => getCurrentWindow().startDragging()
+export const isPetMinimized = () => getCurrentWindow().isMinimized()
+export const onPetMinimized = handler =>
+  listen('pet-window-minimized', event => handler(event.payload))
 
 export const onPetSettingsChanged = handler =>
   listen('pet-settings-changed', event => handler(event.payload))

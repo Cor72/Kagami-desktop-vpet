@@ -6,7 +6,7 @@ import { startPetDragging } from '../api/pet.js'
 
 const props = defineProps({
   expressionRequest: { type: Object, default: null },
-  settings: { type: Object, default: null },
+  renderPolicy: { type: Object, required: true },
 })
 const emit = defineEmits(['error'])
 const canvas = ref(null)
@@ -59,7 +59,7 @@ async function loadModel() {
       return
     }
     controller = next
-    controller.setMaxFps(props.settings?.maxFps ?? 30)
+    applyRenderPolicy()
     await applyLatestExpression()
   } catch (cause) {
     if (!disposed) error.value = String(cause)
@@ -70,9 +70,13 @@ async function loadModel() {
 
 // 加载中只保留 props 中最新的请求；就绪后应用一次，不积压旧表情。
 watch(() => props.expressionRequest, applyLatestExpression)
-watch(() => props.settings?.maxFps, fps => {
-  if (fps) controller?.setMaxFps(fps)
-})
+function applyRenderPolicy() {
+  if (!controller) return
+  controller.setMaxFps(props.renderPolicy.maxFps)
+  controller.setRunning(props.renderPolicy.running)
+}
+// 隐藏时立即停掉同一个 ticker，恢复时继续使用同一份模型。
+watch(() => props.renderPolicy, applyRenderPolicy, { flush: 'sync' })
 
 async function dragWindow() {
   try { await startPetDragging() }
@@ -111,7 +115,7 @@ onUnmounted(() => {
     </div>
     <div v-if="isDev" class="model-toolbar hover-controls">
       <span role="status">
-        {{ loading ? '加载中' : error ? '请检查上方错误' : `已就绪 · 上限 ${settings?.maxFps ?? 30} FPS${appliedExpression ? ` · ${appliedExpression}` : ''}` }}
+        {{ loading ? '加载中' : error ? '请检查上方错误' : `${renderPolicy.running ? '运行' : '已暂停'} · 上限 ${renderPolicy.maxFps} FPS${appliedExpression ? ` · ${appliedExpression}` : ''}` }}
       </span>
       <button v-if="isDev" class="text-button" type="button" :disabled="loading" @click="loadModel">重新加载</button>
     </div>

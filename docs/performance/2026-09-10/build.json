@@ -1,0 +1,28 @@
+{
+  "executableSha256": "E39541AFB46A9F3D3EF4A8B0C948E2ECFDEE5704406090F3F25A591C0B89CC93",
+  "build": "Release --no-bundle --features perf-audit; VITE_PERF_AUDIT=1",
+  "baseCommit": "56f8fc69a37347dc60b9167b01c19d36312653d2",
+  "sourceState": "Stage 5 working tree changes; not committed automatically",
+  "windowLogicalPixels": [
+    340,
+    440
+  ],
+  "rendererResolution": 1,
+  "modelZoom": 2.6,
+  "textures": [
+    {
+      "name": "texture_00.png",
+      "width": 4096,
+      "height": 4096,
+      "bytes": 7056724,
+      "sha256": "A4E8BD15AA2A362806BBFBCFB60BE1840C18488EC9B5C2EE5DE14F1A357D7BB7"
+    },
+    {
+      "name": "texture_01.png",
+      "width": 4096,
+      "height": 4096,
+      "bytes": 4036111,
+      "sha256": "9FE5A579DA522BE3DCF45E16A3F791D40D74D398B5C486514273F03F2C8E3868"
+    }
+  ]
+}

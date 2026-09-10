@@ -9,7 +9,12 @@ name = "yachiyo_desktop_lib"
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
 
+[features]
+# 仅性能验收时启用，日常开发和发行不编译测量流程。
+perf-audit = ["dep:serde_json"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", optional = true }
 tauri = { version = "=2.11.3", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-fs = "=2.5.2"

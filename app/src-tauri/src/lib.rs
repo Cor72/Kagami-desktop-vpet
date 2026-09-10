@@ -1,3 +1,5 @@
+#[cfg(feature = "perf-audit")]
+mod audit;
 mod commands;
 mod desktop;
 mod expression;
@@ -21,6 +23,8 @@ pub fn run() {
                     window.show()?;
                 }
             }
+            #[cfg(feature = "perf-audit")]
+            audit::start(app.handle());
             Ok(())
         })
         .on_window_event(desktop::on_window_event)

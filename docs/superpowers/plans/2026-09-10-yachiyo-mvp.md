@@ -10,7 +10,7 @@
 
 **Spec:** [设计草案](../specs/2026-09-10-yachiyo-mvp-design.md)
 
-**状态：** 2026-09-10 已实现 Task 4：透明窗口、拖动入口、Rust 托盘、共享设置与事件同步。JavaScript 7 个测试、Rust 5 个测试、Clippy 和构建通过。透明显示、Vue 置顶/帧率/表情操作已验证；托盘完整交互、拖动、关闭恢复和退出待用户手动验收，尚未开始 Task 5。
+**状态：** 2026-09-10 已实现 Task 5 的统一暂停策略和恢复时钟。Release 下 30/15 FPS、隐藏、最小化各 2 分钟及 20 次恢复已验证；30 分钟连续待机被额外隐藏打断，用户明确选择留到后续。JavaScript 12 个测试、Rust 5 个业务测试 + 2 个可选验收测试、Clippy 和构建通过。Task 4 的托盘完整交互、拖动、关闭恢复及跨显示器操作仍保留人工验收项。
 
 **执行方式：** 选择 executing-plans，在当前对话逐阶段结对完成。每阶段先解释目标，完成后演示、讲解、交给用户做一个小修改。此任务以用户学习和掌握代码为目标，不采用并行分派，也不自动连续完成六阶段。
 
@@ -281,41 +281,42 @@ const exampleSettings = {
 
 **消费：** 设置快照、controller 与页面可见性。
 
-**策略：** running = Rust 的 visible && document.visibilityState === 'visible'。maxFps 始终为用户选定的 15 或 30。原生最小化/恢复与页面 visibilitychange 都接入同一策略，不依据 blur/focus 暂停。
+**策略：** running = Rust 的 visible && document.visibilityState === 'visible' && !minimized。maxFps 始终为用户选定的 15 或 30。原生最小化/恢复与页面 visibilitychange 都接入同一策略，不依据 blur/focus 暂停。
 
-- [ ] 为纯函数 selectRenderPolicy 写以下测试，再实现函数。Vitest 仅用于这类有独立行为价值的测试，不为按钮、样式或框架包装编写重复测试。
+- [x] 先为纯函数 selectRenderPolicy 写测试，再实现函数。沿用 Node 内置测试运行器，不增加 Vitest；覆盖隐藏、页面不可见、原生最小化与 15 FPS 恢复。
 
 ```javascript
-import { expect, test } from 'vitest'
-import { selectRenderPolicy } from './renderPolicy'
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { selectRenderPolicy } from './renderPolicy.js'
 
 test('隐藏时停止，保留用户帧率设置', () => {
-  expect(selectRenderPolicy(false, true, 30))
-    .toEqual({ running: false, maxFps: 30 })
+  assert.deepEqual(selectRenderPolicy(false, true, 30), { running: false, maxFps: 30 })
 })
 
 test('页面不可见时停止', () => {
-  expect(selectRenderPolicy(true, false, 15))
-    .toEqual({ running: false, maxFps: 15 })
+  assert.deepEqual(selectRenderPolicy(true, false, 15), { running: false, maxFps: 15 })
+  assert.deepEqual(selectRenderPolicy(true, true, 30, true), { running: false, maxFps: 30 })
 })
 
 test('恢复可见后按省电设置运行', () => {
-  expect(selectRenderPolicy(true, true, 15))
-    .toEqual({ running: true, maxFps: 15 })
+  assert.deepEqual(selectRenderPolicy(true, true, 15), { running: true, maxFps: 15 })
 })
 ```
 
 ```javascript
-export function selectRenderPolicy(nativeVisible, pageVisible, maxFps) {
-  return { running: nativeVisible && pageVisible, maxFps }
+export function selectRenderPolicy(nativeVisible, pageVisible, maxFps, minimized = false) {
+  return { running: nativeVisible && pageVisible && !minimized, maxFps }
 }
 ```
 
-- [ ] setRunning(false) 停止共用 ticker，而非仅隐藏 DOM；setRunning(true) 重置时间基准再启动。确认眨眼、物理和绘制没有第二条独立更新循环。
-- [ ] 临时记录模型更新次数与绘制次数：30/15 FPS 上限都应作用于两者；隐藏稳定后两者不再增长。显示恢复时没有大时间步长造成的模型跳跃。
-- [ ] destroy 取消全部监听和 resize 回调，销毁模型、纹理、Application；不卸载后仍保留定时器。反复显示/隐藏保持同一份模型，不借每次重新加载实现暂停。
-- [ ] 用 Release 可执行程序测量，关闭 DevTools；记录主程序及所属 WebView2 进程，并单独记录 GPU 内存。记录硬件、Windows 缩放、角色尺寸、贴图版本、FPS 与采样时长。
+- [x] setRunning(false) 停止共用 ticker，而非仅隐藏 DOM；setRunning(true) 重置时间基准再启动。检查当前依赖源码：模型更新与绘制由 Pixi 的 onRender 驱动。修复依赖 TimeManager 的首帧和恢复步长，并新增两项真实时钟回归测试。
+- [x] 专项 Release 探针记录真实模型 update/draw：实际约 29.49/14.90 次每秒；隐藏和最小化各 2 分钟，稳定段两者增量均为 0；22 次恢复首帧的最大步长为 0。普通生产前端构建已验证不含探针。
+- [x] destroy 取消全部监听和 resize 回调，销毁模型、纹理、Application；测量构建额外取消探针定时器和监听。显示/隐藏调用 stop/start，保留同一个模型；另用实际实例标识验证。
+- [x] 使用含独立探针的 Release 可执行程序测量，无 DevTools/Vite。记录主程序与 7 个 WebView2 子进程、GPU 专用/共享内存、硬件、电源方案、125% 缩放、画布尺寸与 4K 贴图哈希。
 - [ ] 验收：30 和 15 FPS 各采样 2 分钟；隐藏 2 分钟；进行 20 次显示/隐藏；可见待机 30 分钟。检查停更是否生效、恢复是否正常、内存是否持续单向增长。CPU/GPU 没有下降时检查实际 ticker、事件与本地线程，不能只根据框架名称宣布优化成功。
+
+  已完成前述短阶段，另测最小化 2 分钟。可见待机约 6.5 分钟后被额外隐藏打断，不据此判断内存长期稳定。用户选择暂缓长测，原始记录与延期原因见 [性能记录](../../performance/2026-09-10/README.md)。修正后的验收工具会检测中断并失败退出。
 - [ ] 学习练习：用户在 30/15 FPS 间切换，查看更新计数与进程占用的区别；解释 PNG 文件大小、纹理内存、CPU 和 GPU 指标各代表什么。
 
 ## Task 6：打包、验收与用户修改指南
@@ -331,7 +332,7 @@ export function selectRenderPolicy(nativeVisible, pageVisible, maxFps) {
 ```powershell
 # 工作目录：D:/AnChiProject/yachiyodesktop/app
 pnpm build
-pnpm exec vitest run
+pnpm test
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
@@ -357,7 +358,7 @@ pnpm tauri build --bundles nsis
 - 学习覆盖：启动链在 Task 1；双向联调与错误处理在 Task 2；同一条链连接真实角色在 Task 3。
 - 成长空间：表达角色动作的接口与渲染实现分开；当前不创建空聊天服务或通用插件框架。
 - 接口一致：表情协议统一使用 name；设置帧率统一使用 maxFps，Rust 字段通过 serde camelCase 序列化；事件名称在 api/pet.js 集中定义。
-- 性能结论：计划只指定行为目标和测量方法，当前没有性能实测数据。
+- 性能结论：已有 Release 短阶段实测数据，停更与帧率控制有效；连续可见 30 分钟验收按用户决定暂缓，尚不作长期内存稳定结论。
 
 ## 参考入口
 

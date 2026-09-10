@@ -1,9 +1,11 @@
-import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import {
   getPetSettings, onExpressionRequested, onPetDesktopError, onPetSettingsChanged,
   quitPet, requestExpression, setPetAlwaysOnTop, setPetMaxFps, setPetVisible,
+  isPetMinimized, onPetMinimized,
 } from '../api/pet.js'
 import { latestSettings } from './petSettings.js'
+import { selectRenderPolicy } from '../live2d/renderPolicy.js'
 
 export function usePet() {
   const ready = ref(false)
@@ -15,9 +17,19 @@ export function usePet() {
   const error = ref('')
   const settings = shallowRef(null)
   const settingsBusy = ref(false)
+  const pageVisible = ref(document.visibilityState === 'visible')
+  const minimized = ref(false)
+  const renderPolicy = computed(() => selectRenderPolicy(
+    settings.value?.visible ?? false, pageVisible.value, settings.value?.maxFps ?? 30, minimized.value,
+  ))
 
   let disposed = false
   const unlisteners = []
+  let minimizeEventVersion = 0
+
+  function updatePageVisibility() {
+    pageVisible.value = document.visibilityState === 'visible'
+  }
 
   function acceptSettings(snapshot) {
     if (!disposed) settings.value = latestSettings(settings.value, snapshot)
@@ -33,6 +45,8 @@ export function usePet() {
   }
 
   onMounted(async () => {
+    document.addEventListener('visibilitychange', updatePageVisibility)
+    updatePageVisibility()
     try {
       const subscriptions = [
         () => onExpressionRequested(name => {
@@ -47,6 +61,11 @@ export function usePet() {
         }),
         () => onPetSettingsChanged(acceptSettings),
         () => onPetDesktopError(message => { if (!disposed) error.value = message }),
+        () => onPetMinimized(value => {
+          if (disposed) return
+          minimizeEventVersion++
+          minimized.value = value
+        }),
       ]
       for (const subscribe of subscriptions) {
         const stopListening = await subscribe()
@@ -59,6 +78,9 @@ export function usePet() {
       }
       // 先监听，再读取；较旧的初始快照不能覆盖期间到达的新事件。
       acceptSettings(await getPetSettings())
+      const version = minimizeEventVersion
+      const initialMinimized = await isPetMinimized()
+      if (!disposed && version === minimizeEventVersion) minimized.value = initialMinimized
       if (!disposed) ready.value = true
     } catch (cause) {
       if (!disposed) {
@@ -70,6 +92,7 @@ export function usePet() {
   onUnmounted(() => {
     disposed = true
     ready.value = false
+    document.removeEventListener('visibilitychange', updatePageVisibility)
     for (const unlisten of unlisteners) void stopListener(unlisten)
   })
 
@@ -113,7 +136,7 @@ export function usePet() {
 
   return {
     ready, sending, requestStatus, lastExpression, receivedCount, expressionRequest, error, sendExpression,
-    settings, settingsBusy, quit,
+    settings, settingsBusy, renderPolicy, quit,
     setVisible: visible => changeSettings(() => setPetVisible(visible)),
     setMaxFps: fps => changeSettings(() => setPetMaxFps(fps)),
     setAlwaysOnTop: enabled => changeSettings(() => setPetAlwaysOnTop(enabled)),

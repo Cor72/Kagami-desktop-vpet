@@ -1,8 +1,34 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef438e8903 100644
+index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..5d5b392466d52cc63c843ead3e51c6d907b080e1 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -5474,7 +5474,7 @@ var FileLoader = class {
+@@ -4494,20 +4494,18 @@ var EventBus = class {
+   }
+ };
+ var TimeManager = class {
+-  currentFrame = 0;
+-  lastFrame = 0;
++  lastFrame = null;
+   _deltaTime = 0;
+   get deltaTime() {
+     return this._deltaTime;
+   }
+   update() {
+-    this.currentFrame = Date.now();
+-    this._deltaTime = (this.currentFrame - this.lastFrame) / 1e3;
+-    this.lastFrame = this.currentFrame;
++    const now = performance.now();
++    this._deltaTime = this.lastFrame === null ? 0 : Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1e3));
++    this.lastFrame = now;
+   }
+   reset() {
+-    this.currentFrame = 0;
+-    this.lastFrame = 0;
++    this.lastFrame = null;
+     this._deltaTime = 0;
+   }
+ };
+@@ -5474,7 +5472,7 @@ var FileLoader = class {
      } catch (error) {
        console.error(`Failed to fetch: ${url}`, error);
      }
@@ -11,7 +37,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
    }
  };
  var EMPTY_REDIR = {
-@@ -5505,6 +5505,7 @@ var ModelLoader = class {
+@@ -5505,6 +5503,7 @@ var ModelLoader = class {
        model.setReady(true);
      } catch (error) {
        CubismLogError(`Failed to load model: ${error}`);
@@ -19,7 +45,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
      }
    }
    async resolveSetting(assets) {
-@@ -5584,14 +5585,16 @@ var ModelLoader = class {
+@@ -5584,14 +5583,16 @@ var ModelLoader = class {
        if (!fileName)
          continue;
        const url = hasRedir && ctx.redir.Textures[i] || `${ctx.homeDir}${fileName}`;
@@ -39,7 +65,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
    }
  };
  var TextureInfo = class {
-@@ -5608,7 +5611,7 @@ var TextureLoader = class {
+@@ -5608,7 +5609,7 @@ var TextureLoader = class {
    constructor(webgl) {
      this._webgl = webgl;
    }
@@ -48,7 +74,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
      const cached = this._textures.find(
        (t) => t.fileName === fileName && t.usePremultiply === usePremultiply
      );
-@@ -5617,6 +5620,7 @@ var TextureLoader = class {
+@@ -5617,6 +5618,7 @@ var TextureLoader = class {
        if (Config.crossOrigin !== void 0)
          cached.img.crossOrigin = Config.crossOrigin;
        cached.img.addEventListener("load", () => callback(cached), { passive: true });
@@ -56,7 +82,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
        cached.img.src = fileName;
        return;
      }
-@@ -5627,6 +5631,7 @@ var TextureLoader = class {
+@@ -5627,6 +5629,7 @@ var TextureLoader = class {
        const textureInfo = this.createGlTexture(img, fileName, usePremultiply);
        callback(textureInfo);
      }, { passive: true });
@@ -64,7 +90,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
      img.src = fileName;
    }
    createGlTexture(img, fileName, usePremultiply) {
-@@ -14649,6 +14654,7 @@ var Live2DSprite = class extends pixi_js.Sprite {
+@@ -14649,6 +14652,7 @@ var Live2DSprite = class extends pixi_js.Sprite {
    _readyPromise;
    /** Resolver captured from the _readyPromise constructor; cleared after resolving. */
    _readyResolve = null;
@@ -72,7 +98,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
    get width() {
      return Math.abs(this.scale.x) * this.getLocalModelWidth();
    }
-@@ -14690,13 +14696,19 @@ var Live2DSprite = class extends pixi_js.Sprite {
+@@ -14690,13 +14694,19 @@ var Live2DSprite = class extends pixi_js.Sprite {
      super();
      this._ctx = new Live2DContext();
      this.renderable = false;
@@ -94,7 +120,7 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
      };
    }
    init(config) {
-@@ -14862,6 +14874,7 @@ var Live2DSprite = class extends pixi_js.Sprite {
+@@ -14862,6 +14872,7 @@ var Live2DSprite = class extends pixi_js.Sprite {
      this._pointerHandler?.detach();
      this._resizeObserver?.disconnect();
      this._textureLoader?.release();
@@ -102,11 +128,59 @@ index 5868b1b6c3ba560c5ccfd3d87a5e97bd854efdfb..85ad41da08ef2e442a9c820bba681bef
      this._model = null;
      this._ctx.dispose();
      if (this._cubismInitialized) {
+@@ -14870,6 +14881,9 @@ var Live2DSprite = class extends pixi_js.Sprite {
+     }
+     super.destroy(options);
+   }
++  resetTime() {
++    this._ctx.timeManager.reset();
++  }
+   // --- 内部方法 ---
+   async renderFrame(renderer) {
+     this.renderer = renderer;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 82d08e1650e133add21286b189575c7edce200fd..984b98dfffa2862b1cdb0941614222d2be4d448f 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1355,6 +1355,7 @@ declare class Live2DSprite extends Sprite {
+     }, height?: number): void;
+     protected updateBounds(): void;
+     destroy(options?: DestroyOptions): void;
++    resetTime(): void;
+     private renderFrame;
+     private initCubism;
+     private initModel;
 diff --git a/dist/index.js b/dist/index.js
-index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db3846632b681adc 100644
+index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..d00ec9632e180a06616c494e3435d1a9edac55b9 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -5472,7 +5472,7 @@ var FileLoader = class {
+@@ -4492,20 +4492,18 @@ var EventBus = class {
+   }
+ };
+ var TimeManager = class {
+-  currentFrame = 0;
+-  lastFrame = 0;
++  lastFrame = null;
+   _deltaTime = 0;
+   get deltaTime() {
+     return this._deltaTime;
+   }
+   update() {
+-    this.currentFrame = Date.now();
+-    this._deltaTime = (this.currentFrame - this.lastFrame) / 1e3;
+-    this.lastFrame = this.currentFrame;
++    const now = performance.now();
++    this._deltaTime = this.lastFrame === null ? 0 : Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1e3));
++    this.lastFrame = now;
+   }
+   reset() {
+-    this.currentFrame = 0;
+-    this.lastFrame = 0;
++    this.lastFrame = null;
+     this._deltaTime = 0;
+   }
+ };
+@@ -5472,7 +5470,7 @@ var FileLoader = class {
      } catch (error) {
        console.error(`Failed to fetch: ${url}`, error);
      }
@@ -115,7 +189,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
    }
  };
  var EMPTY_REDIR = {
-@@ -5503,6 +5503,7 @@ var ModelLoader = class {
+@@ -5503,6 +5501,7 @@ var ModelLoader = class {
        model.setReady(true);
      } catch (error) {
        CubismLogError(`Failed to load model: ${error}`);
@@ -123,7 +197,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
      }
    }
    async resolveSetting(assets) {
-@@ -5582,14 +5583,16 @@ var ModelLoader = class {
+@@ -5582,14 +5581,16 @@ var ModelLoader = class {
        if (!fileName)
          continue;
        const url = hasRedir && ctx.redir.Textures[i] || `${ctx.homeDir}${fileName}`;
@@ -143,7 +217,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
    }
  };
  var TextureInfo = class {
-@@ -5606,7 +5609,7 @@ var TextureLoader = class {
+@@ -5606,7 +5607,7 @@ var TextureLoader = class {
    constructor(webgl) {
      this._webgl = webgl;
    }
@@ -152,7 +226,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
      const cached = this._textures.find(
        (t) => t.fileName === fileName && t.usePremultiply === usePremultiply
      );
-@@ -5615,6 +5618,7 @@ var TextureLoader = class {
+@@ -5615,6 +5616,7 @@ var TextureLoader = class {
        if (Config.crossOrigin !== void 0)
          cached.img.crossOrigin = Config.crossOrigin;
        cached.img.addEventListener("load", () => callback(cached), { passive: true });
@@ -160,7 +234,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
        cached.img.src = fileName;
        return;
      }
-@@ -5625,6 +5629,7 @@ var TextureLoader = class {
+@@ -5625,6 +5627,7 @@ var TextureLoader = class {
        const textureInfo = this.createGlTexture(img, fileName, usePremultiply);
        callback(textureInfo);
      }, { passive: true });
@@ -168,7 +242,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
      img.src = fileName;
    }
    createGlTexture(img, fileName, usePremultiply) {
-@@ -14647,6 +14652,7 @@ var Live2DSprite = class extends Sprite {
+@@ -14647,6 +14650,7 @@ var Live2DSprite = class extends Sprite {
    _readyPromise;
    /** Resolver captured from the _readyPromise constructor; cleared after resolving. */
    _readyResolve = null;
@@ -176,7 +250,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
    get width() {
      return Math.abs(this.scale.x) * this.getLocalModelWidth();
    }
-@@ -14688,13 +14694,19 @@ var Live2DSprite = class extends Sprite {
+@@ -14688,13 +14692,19 @@ var Live2DSprite = class extends Sprite {
      super();
      this._ctx = new Live2DContext();
      this.renderable = false;
@@ -198,7 +272,7 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
      };
    }
    init(config) {
-@@ -14860,6 +14872,7 @@ var Live2DSprite = class extends Sprite {
+@@ -14860,6 +14870,7 @@ var Live2DSprite = class extends Sprite {
      this._pointerHandler?.detach();
      this._resizeObserver?.disconnect();
      this._textureLoader?.release();
@@ -206,3 +280,13 @@ index 472aa302f8626d92efb2a8d11fcce7155c20c7e7..345dfbb091c42fefb310bae2db384663
      this._model = null;
      this._ctx.dispose();
      if (this._cubismInitialized) {
+@@ -14868,6 +14879,9 @@ var Live2DSprite = class extends Sprite {
+     }
+     super.destroy(options);
+   }
++  resetTime() {
++    this._ctx.timeManager.reset();
++  }
+   // --- 内部方法 ---
+   async renderFrame(renderer) {
+     this.renderer = renderer;

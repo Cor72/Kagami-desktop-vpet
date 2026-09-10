@@ -21,12 +21,14 @@ export function createPetController(options) {
 async function loadPet({ canvas, modelDirectory, signal }) {
   let app
   let model
+  let detachProbe
   let disposed = false
 
   function destroy() {
     if (disposed) return
     disposed = true
     app?.stop()
+    detachProbe?.()
     model?.destroy()
     // Canvas 属于 Vue，不让 Pixi 删除 DOM。
     if (app?.renderer) app.destroy({ removeView: false }, { children: true })
@@ -91,6 +93,12 @@ async function loadPet({ canvas, modelDirectory, signal }) {
 
     resize(canvas.clientWidth, canvas.clientHeight)
 
+    // 仅专项测量构建加载探针；正常发布版没有计数上报或采样定时器。
+    if (import.meta.env.VITE_PERF_AUDIT === '1') {
+      const { attachPerformanceProbe } = await import('./performanceProbe.js')
+      detachProbe = attachPerformanceProbe(model, app)
+    }
+
     return {
       async setExpression(name) {
         if (disposed) return
@@ -100,8 +108,14 @@ async function loadPet({ canvas, modelDirectory, signal }) {
       resize,
       setRunning(running) {
         if (disposed) return
-        if (running) app.start()
-        else app.stop()
+        if (running === app.ticker.started) return
+        if (running) {
+          model.resetTime()
+          app.ticker.lastTime = performance.now()
+          app.start()
+        } else {
+          app.stop()
+        }
       },
       setMaxFps(fps) {
         if (fps !== 15 && fps !== 30) throw new Error('帧率只能是 15 或 30')

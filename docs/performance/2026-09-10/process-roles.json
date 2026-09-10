@@ -1,0 +1,42 @@
+[
+  {
+    "pid": 23244,
+    "name": "yachiyo-desktop",
+    "role": "Rust host"
+  },
+  {
+    "pid": 19280,
+    "name": "msedgewebview2",
+    "role": "WebView2 browser"
+  },
+  {
+    "pid": 10376,
+    "name": "msedgewebview2",
+    "role": "crashpad-handler"
+  },
+  {
+    "pid": 9516,
+    "name": "msedgewebview2",
+    "role": "gpu-process"
+  },
+  {
+    "pid": 14776,
+    "name": "msedgewebview2",
+    "role": "utility"
+  },
+  {
+    "pid": 23796,
+    "name": "msedgewebview2",
+    "role": "utility"
+  },
+  {
+    "pid": 12268,
+    "name": "msedgewebview2",
+    "role": "renderer"
+  },
+  {
+    "pid": 13708,
+    "name": "msedgewebview2",
+    "role": "utility"
+  }
+]

@@ -55,6 +55,18 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if window.label() != "main" {
         return;
     }
+    // Windows 最小化/还原会触发尺寸事件；这里只报告真实最小化状态。
+    // 不读取 PetState 的锁，避免与正在执行的窗口操作互相等待。
+    if let WindowEvent::Resized(_) = event {
+        match window.is_minimized() {
+            Ok(minimized) => {
+                let _ = window.emit("pet-window-minimized", minimized);
+            }
+            Err(error) => {
+                report_error(window.app_handle(), &format!("读取最小化状态失败：{error}"))
+            }
+        }
+    }
     if let WindowEvent::CloseRequested { api, .. } = event {
         // 只有托盘创建成功，才允许关闭改为隐藏；显式退出不经过这里。
         if window.app_handle().tray_by_id(tray::TRAY_ID).is_some() {

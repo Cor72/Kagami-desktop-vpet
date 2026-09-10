@@ -1,0 +1,196 @@
+{
+  "results": [
+    {
+      "phase": "warmup",
+      "phaseSeconds": 20,
+      "measuredRenderSeconds": 10.002,
+      "updatesPerSecond": 29.494101179764044,
+      "drawsPerSecond": 29.494101179764044,
+      "updateDelta": 295,
+      "drawDelta": 295,
+      "instanceCount": 1,
+      "runningStates": [
+        true
+      ],
+      "cpuPercentMean": 2.3071803976047036,
+      "workingSetMiBMedian": 846.00390625,
+      "privateMiBMedian": 496.689453125,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 229.83203125,
+      "osSamples": 2,
+      "startPrivateMiB": 496.689453125,
+      "endPrivateMiB": 496.689453125
+    },
+    {
+      "phase": "visible-30fps",
+      "phaseSeconds": 120,
+      "measuredRenderSeconds": 109.997,
+      "updatesPerSecond": 29.491713410365737,
+      "drawsPerSecond": 29.491713410365737,
+      "updateDelta": 3244,
+      "drawDelta": 3244,
+      "instanceCount": 1,
+      "runningStates": [
+        true
+      ],
+      "cpuPercentMean": 4.641433004057583,
+      "workingSetMiBMedian": 850.86328125,
+      "privateMiBMedian": 497.267578125,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 229.83203125,
+      "osSamples": 20,
+      "startPrivateMiB": 495.921875,
+      "endPrivateMiB": 497.45703125
+    },
+    {
+      "phase": "visible-15fps",
+      "phaseSeconds": 120,
+      "measuredRenderSeconds": 109.995,
+      "updatesPerSecond": 14.900677303513795,
+      "drawsPerSecond": 14.900677303513795,
+      "updateDelta": 1639,
+      "drawDelta": 1639,
+      "instanceCount": 1,
+      "runningStates": [
+        true
+      ],
+      "cpuPercentMean": 3.165650680776696,
+      "workingSetMiBMedian": 859.19140625,
+      "privateMiBMedian": 500.08984375,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 229.26171875,
+      "osSamples": 20,
+      "startPrivateMiB": 498.55859375,
+      "endPrivateMiB": 502.28125
+    },
+    {
+      "phase": "hidden",
+      "phaseSeconds": 120,
+      "measuredRenderSeconds": 110.001,
+      "updatesPerSecond": 0,
+      "drawsPerSecond": 0,
+      "updateDelta": 0,
+      "drawDelta": 0,
+      "instanceCount": 1,
+      "runningStates": [
+        false
+      ],
+      "cpuPercentMean": 0,
+      "workingSetMiBMedian": 792.00390625,
+      "privateMiBMedian": 430.861328125,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 230.796875,
+      "osSamples": 20,
+      "startPrivateMiB": 430.296875,
+      "endPrivateMiB": 431.294921875
+    },
+    {
+      "phase": "restored",
+      "phaseSeconds": 15,
+      "measuredRenderSeconds": 5,
+      "updatesPerSecond": 15,
+      "drawsPerSecond": 15,
+      "updateDelta": 75,
+      "drawDelta": 75,
+      "instanceCount": 1,
+      "runningStates": [
+        true
+      ],
+      "cpuPercentMean": 3.0707517540533216,
+      "workingSetMiBMedian": 834.13671875,
+      "privateMiBMedian": 473.37109375,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 229.78125,
+      "osSamples": 1,
+      "startPrivateMiB": 473.37109375,
+      "endPrivateMiB": 473.37109375
+    },
+    {
+      "phase": "minimized",
+      "phaseSeconds": 120.001,
+      "measuredRenderSeconds": 110,
+      "updatesPerSecond": 0,
+      "drawsPerSecond": 0,
+      "updateDelta": 0,
+      "drawDelta": 0,
+      "instanceCount": 1,
+      "runningStates": [
+        false
+      ],
+      "cpuPercentMean": 0,
+      "workingSetMiBMedian": 862.96484375,
+      "privateMiBMedian": 501.744140625,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 231.3046875,
+      "osSamples": 20,
+      "startPrivateMiB": 501.82421875,
+      "endPrivateMiB": 501.681640625
+    },
+    {
+      "phase": "unminimized",
+      "phaseSeconds": 15,
+      "measuredRenderSeconds": 5.001,
+      "updatesPerSecond": 14.997000599880023,
+      "drawsPerSecond": 14.997000599880023,
+      "updateDelta": 75,
+      "drawDelta": 75,
+      "instanceCount": 1,
+      "runningStates": [
+        true
+      ],
+      "cpuPercentMean": 1.54975659367964,
+      "workingSetMiBMedian": 863.1953125,
+      "privateMiBMedian": 501.625,
+      "gpuDedicatedMiBMedian": 0,
+      "gpuSharedMiBMedian": 229.78125,
+      "osSamples": 1,
+      "startPrivateMiB": 501.625,
+      "endPrivateMiB": 501.625
+    },
+    {
+      "phase": "idle-30-minutes",
+      "phaseSeconds": 875.423,
+      "continuousVisibleIdlePassed": false,
+      "reason": "visible idle interrupted",
+      "firstNativeInterruption": {
+        "elapsedSeconds": 1002.3384409,
+        "timestampMs": 1789053710202,
+        "settings": {
+          "alwaysOnTop": true,
+          "maxFps": 30,
+          "revision": 49,
+          "visible": false
+        },
+        "nativeVisible": false,
+        "minimized": false
+      }
+    }
+  ],
+  "completedAllPhases": false,
+  "deferred": true,
+  "totalInstanceCount": 1,
+  "visibilityCycles": 20,
+  "finalRenderer": {
+    "canvasHeight": 394,
+    "canvasWidth": 324,
+    "draws": 18254,
+    "errors": 0,
+    "instanceId": "b2671210-64a9-4004-9f74-fb695818b26b",
+    "maxDeltaSeconds": 0.08479999999701977,
+    "maxFps": 30,
+    "maxPausedDrawDelta": 0,
+    "maxPausedUpdateDelta": 0,
+    "maxResumeDeltaSeconds": 0,
+    "pageVisible": true,
+    "pauses": 24,
+    "reportedAt": 1789054194141,
+    "resumes": 23,
+    "running": false,
+    "updates": 18254
+  },
+  "gpuCounterErrors": [],
+  "distinctProcessNames": [
+    "yachiyo-desktop",
+    "msedgewebview2"
+  ]
+}

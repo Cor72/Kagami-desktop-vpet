@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  easy-live2d@0.4.4: 396db01123aaa8acc9469ad0903135968ae6083059a749888a6ea9616bea6b38
+  easy-live2d@0.4.4: fe1de9ed1ffd466f20783d05ca1417a69282dd1f8eab4be85925de43b863c34c
 
 importers:
 
@@ -19,7 +19,7 @@ importers:
         version: 2.5.2
       easy-live2d:
         specifier: 0.4.4
-        version: 0.4.4(patch_hash=396db01123aaa8acc9469ad0903135968ae6083059a749888a6ea9616bea6b38)(eslint@10.10.0)(pixi.js@8.20.1)
+        version: 0.4.4(patch_hash=fe1de9ed1ffd466f20783d05ca1417a69282dd1f8eab4be85925de43b863c34c)(eslint@10.10.0)(pixi.js@8.20.1)
       pixi.js:
         specifier: 8.20.1
         version: 8.20.1
@@ -1360,7 +1360,7 @@ snapshots:
 
   earcut@3.2.3: {}
 
-  easy-live2d@0.4.4(patch_hash=396db01123aaa8acc9469ad0903135968ae6083059a749888a6ea9616bea6b38)(eslint@10.10.0)(pixi.js@8.20.1):
+  easy-live2d@0.4.4(patch_hash=fe1de9ed1ffd466f20783d05ca1417a69282dd1f8eab4be85925de43b863c34c)(eslint@10.10.0)(pixi.js@8.20.1):
     dependencies:
       '@pixi/sound': 6.0.1(pixi.js@8.20.1)
       eslint-plugin-format: 2.0.1(eslint@10.10.0)
