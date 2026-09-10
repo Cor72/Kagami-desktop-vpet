@@ -1,0 +1,7 @@
+# 使用 HTTPS sparse 索引，覆盖本机旧的 git:// 镜像配置。
+# 仅作用于从 app/ 或其子目录启动的 Cargo 构建。
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"

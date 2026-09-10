@@ -1,0 +1,33 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "yachiyo.moc3",
+		"Textures": [
+			"yachiyo.8192/texture_00.png",
+			"yachiyo.8192/texture_01.png"
+		],
+		"Physics": "yachiyo.physics3.json",
+		"DisplayInfo": "yachiyo.cdi3.json",
+		"Expressions": [
+			{ "Name": "smile",    "File": "smile.exp3.json" },
+			{ "Name": "squint",   "File": "squint.exp3.json" },
+			{ "Name": "tears",    "File": "tears.exp3.json" },
+			{ "Name": "teardrop", "File": "teardrop.exp3.json" }
+		]
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		}
+	]
+}

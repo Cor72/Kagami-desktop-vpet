@@ -1,0 +1,13 @@
+[package]
+name = "yachiyo-desktop"
+version = "0.1.0"
+description = "八千代桌宠"
+edition = "2021"
+[lib]
+name = "yachiyo_desktop_lib"
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.11.3", features = [] }
