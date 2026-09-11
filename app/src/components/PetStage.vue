@@ -2,13 +2,15 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { resolveResource } from '@tauri-apps/api/path'
 import { createPetController } from '../live2d/controller.js'
-import { startPetDragging } from '../api/pet.js'
+import { onPetModelReload, startPetDragging } from '../api/pet.js'
+import { createPetGesture } from '../interactions/petGesture.js'
 
 const props = defineProps({
   expressionRequest: { type: Object, default: null },
   renderPolicy: { type: Object, required: true },
+  beforeDrag: { type: Function, default: () => {} },
 })
-const emit = defineEmits(['error'])
+const emit = defineEmits(['error', 'activate', 'context'])
 const canvas = ref(null)
 const canvasKey = ref(0)
 const stage = ref(null)
@@ -16,7 +18,9 @@ const loading = ref(false)
 const error = ref('')
 const modelDirectory = ref('assets/models/yachiyo')
 const appliedExpression = ref('')
-const isDev = import.meta.env.DEV
+const gesture = createPetGesture()
+let pressed = false
+let stopReload
 
 let controller
 let observer
@@ -79,11 +83,43 @@ function applyRenderPolicy() {
 watch(() => props.renderPolicy, applyRenderPolicy, { flush: 'sync' })
 
 async function dragWindow() {
-  try { await startPetDragging() }
+  try {
+    const pendingClose = props.beforeDrag()
+    if (pendingClose) await pendingClose
+    if (pressed && !disposed) await startPetDragging()
+  }
   catch (cause) { emit('error', `拖动窗口失败：${String(cause)}`) }
+  finally { cancelGesture() }
 }
 
+function cancelGesture() { pressed = false; gesture.cancel() }
+function pointerDown(event) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  pressed = true
+  gesture.pointerDown(event)
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+function pointerMove(event) {
+  if (gesture.pointerMove(event) === 'drag') void dragWindow()
+}
+function pointerUp(event) {
+  pressed = false
+  if (gesture.pointerUp(event) === 'click') emit('activate')
+  if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+}
+function contextMenu() { cancelGesture(); emit('context') }
+function focus() { canvas.value?.focus({ preventScroll: true }) }
+defineExpose({ focus })
+
 onMounted(() => {
+  window.addEventListener('blur', cancelGesture)
+  if (import.meta.env.DEV) {
+    onPetModelReload(() => { void loadModel() }).then(stop => {
+      if (disposed) stop()
+      else stopReload = stop
+    }).catch(cause => emit('error', `订阅重新加载失败：${String(cause)}`))
+  }
   observer = new ResizeObserver(([entry]) => {
     controller?.resize(entry.contentRect.width, entry.contentRect.height)
   })
@@ -93,6 +129,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   disposed = true
+  cancelGesture()
+  window.removeEventListener('blur', cancelGesture)
+  stopReload?.()
   abortController?.abort()
   observer?.disconnect()
   controller?.destroy()
@@ -103,7 +142,7 @@ onUnmounted(() => {
 <template>
   <section class="pet-view" aria-label="八千代模型">
     <div ref="stage" class="pet-stage">
-      <canvas :key="canvasKey" ref="canvas" aria-label="八千代 Live2D 模型，按住拖动" @mousedown.left.prevent="dragWindow" />
+      <canvas :key="canvasKey" ref="canvas" tabindex="0" role="button" aria-label="八千代：单击随机表情，按住拖动，右键打开菜单" @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="pointerUp" @pointercancel="cancelGesture" @contextmenu.prevent.stop="contextMenu" @keydown.enter.prevent="emit('activate')" @keydown.space.prevent="emit('activate')" @keydown.shift.f10.prevent="contextMenu" />
       <div v-if="loading || error" class="stage-message" :role="error ? 'alert' : 'status'">
         <p>{{ loading ? '正在加载八千代…' : '模型加载或表情切换失败' }}</p>
         <template v-if="error">
@@ -112,12 +151,6 @@ onUnmounted(() => {
           <button type="button" @click="loadModel">重试加载</button>
         </template>
       </div>
-    </div>
-    <div v-if="isDev" class="model-toolbar hover-controls">
-      <span role="status">
-        {{ loading ? '加载中' : error ? '请检查上方错误' : `${renderPolicy.running ? '运行' : '已暂停'} · 上限 ${renderPolicy.maxFps} FPS${appliedExpression ? ` · ${appliedExpression}` : ''}` }}
-      </span>
-      <button v-if="isDev" class="text-button" type="button" :disabled="loading" @click="loadModel">重新加载</button>
     </div>
   </section>
 </template>

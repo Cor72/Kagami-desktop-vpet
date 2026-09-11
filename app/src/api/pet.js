@@ -17,12 +17,22 @@ export function onExpressionRequested(handler) {
 }
 
 export const getPetSettings = () => invoke('get_pet_settings')
+// 相对当前窗口客户区的逻辑坐标；鼠标在窗口外时也有效。
+export const getPetCursorPosition = () => invoke('get_pet_cursor_position')
 export const setPetVisible = visible => invoke('set_pet_visible', { visible })
 // Rust 的 max_fps 参数在 JS 调用中使用 camelCase：maxFps。
 export const setPetMaxFps = maxFps => invoke('set_pet_max_fps', { maxFps })
 export const setPetAlwaysOnTop = enabled => invoke('set_pet_always_on_top', { enabled })
 export const quitPet = () => invoke('quit_pet')
 export const startPetDragging = () => getCurrentWindow().startDragging()
+export const setPetMenuOpen = open => invoke('set_pet_menu_open', { open })
+export const openPetSettings = () => invoke('open_pet_settings')
+export const reloadPetModel = () => invoke('reload_pet_model')
+export const onPetMenuLayoutChanged = handler =>
+  listen('pet-menu-layout-changed', event => handler(event.payload))
+export const onPetModelReload = handler => listen('pet-model-reload', handler)
+export const onExpressionObserved = handler =>
+  listen('pet-expression-observed', event => handler(event.payload.name))
 export const isPetMinimized = () => getCurrentWindow().isMinimized()
 export const onPetMinimized = handler =>
   listen('pet-window-minimized', event => handler(event.payload))

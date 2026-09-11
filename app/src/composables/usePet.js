@@ -1,22 +1,21 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import {
-  getPetSettings, onExpressionRequested, onPetDesktopError, onPetSettingsChanged,
-  quitPet, requestExpression, setPetAlwaysOnTop, setPetMaxFps, setPetVisible,
+  onExpressionRequested, onPetDesktopError,
+  quitPet, requestExpression,
   isPetMinimized, onPetMinimized,
 } from '../api/pet.js'
-import { latestSettings } from './petSettings.js'
+import { usePetSettings } from './usePetSettings.js'
 import { selectRenderPolicy } from '../live2d/renderPolicy.js'
 
 export function usePet() {
+  const shared = usePetSettings()
+  const { settings, settingsBusy, error } = shared
   const ready = ref(false)
   const sending = ref(false)
   const requestStatus = ref('尚未发送')
   const lastExpression = ref('')
   const receivedCount = ref(0)
   const expressionRequest = shallowRef(null)
-  const error = ref('')
-  const settings = shallowRef(null)
-  const settingsBusy = ref(false)
   const pageVisible = ref(document.visibilityState === 'visible')
   const minimized = ref(false)
   const renderPolicy = computed(() => selectRenderPolicy(
@@ -29,10 +28,6 @@ export function usePet() {
 
   function updatePageVisibility() {
     pageVisible.value = document.visibilityState === 'visible'
-  }
-
-  function acceptSettings(snapshot) {
-    if (!disposed) settings.value = latestSettings(settings.value, snapshot)
   }
 
   async function stopListener(stop) {
@@ -59,7 +54,6 @@ export function usePet() {
           expressionRequest.value = { name, sequence: receivedCount.value }
           console.log('[Vue] 收到 Rust 事件:', name)
         }),
-        () => onPetSettingsChanged(acceptSettings),
         () => onPetDesktopError(message => { if (!disposed) error.value = message }),
         () => onPetMinimized(value => {
           if (disposed) return
@@ -76,8 +70,6 @@ export function usePet() {
         }
         unlisteners.push(stopListening)
       }
-      // 先监听，再读取；较旧的初始快照不能覆盖期间到达的新事件。
-      acceptSettings(await getPetSettings())
       const version = minimizeEventVersion
       const initialMinimized = await isPetMinimized()
       if (!disposed && version === minimizeEventVersion) minimized.value = initialMinimized
@@ -97,7 +89,7 @@ export function usePet() {
   })
 
   async function sendExpression(name) {
-    if (!ready.value || sending.value) return
+    if (!ready.value || sending.value) return false
 
     sending.value = true
     error.value = ''
@@ -106,26 +98,15 @@ export function usePet() {
     try {
       await requestExpression(name)
       if (!disposed) requestStatus.value = `请求已发送：${name}（Rust 命令成功返回）`
+      return true
     } catch (cause) {
       if (!disposed) {
         requestStatus.value = `请求失败：${name}`
         error.value = String(cause)
       }
+      return false
     } finally {
       if (!disposed) sending.value = false
-    }
-  }
-
-  async function changeSettings(command) {
-    if (!ready.value || settingsBusy.value) return
-    settingsBusy.value = true
-    error.value = ''
-    try {
-      acceptSettings(await command())
-    } catch (cause) {
-      if (!disposed) error.value = String(cause)
-    } finally {
-      if (!disposed) settingsBusy.value = false
     }
   }
 
@@ -135,10 +116,8 @@ export function usePet() {
   }
 
   return {
+    ...shared,
     ready, sending, requestStatus, lastExpression, receivedCount, expressionRequest, error, sendExpression,
     settings, settingsBusy, renderPolicy, quit,
-    setVisible: visible => changeSettings(() => setPetVisible(visible)),
-    setMaxFps: fps => changeSettings(() => setPetMaxFps(fps)),
-    setAlwaysOnTop: enabled => changeSettings(() => setPetAlwaysOnTop(enabled)),
   }
 }
