@@ -18,6 +18,13 @@ pub fn get_pet_settings(app: tauri::AppHandle) -> Result<PetSettings, String> {
 }
 
 #[tauri::command]
+pub async fn get_pet_cursor_position(
+    window: tauri::WebviewWindow,
+) -> Result<desktop::CursorPosition, String> {
+    desktop::get_cursor_position(&window)
+}
+
+#[tauri::command]
 pub fn set_pet_visible(app: tauri::AppHandle, visible: bool) -> Result<PetSettings, String> {
     desktop::update_settings(&app, SettingsChange::Visible(visible))
 }

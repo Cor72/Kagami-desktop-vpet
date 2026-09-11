@@ -17,6 +17,8 @@ export function onExpressionRequested(handler) {
 }
 
 export const getPetSettings = () => invoke('get_pet_settings')
+// 相对当前窗口客户区的逻辑坐标；鼠标在窗口外时也有效。
+export const getPetCursorPosition = () => invoke('get_pet_cursor_position')
 export const setPetVisible = visible => invoke('set_pet_visible', { visible })
 // Rust 的 max_fps 参数在 JS 调用中使用 camelCase：maxFps。
 export const setPetMaxFps = maxFps => invoke('set_pet_max_fps', { maxFps })

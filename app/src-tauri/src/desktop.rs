@@ -2,6 +2,34 @@ use crate::settings::{PetSettings, PetState, SettingsChange};
 use crate::tray;
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent};
 
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct CursorPosition {
+    x: f64,
+    y: f64,
+}
+
+fn logical_cursor_position(
+    cursor: tauri::PhysicalPosition<f64>,
+    origin: tauri::PhysicalPosition<i32>,
+    scale: f64,
+) -> CursorPosition {
+    CursorPosition {
+        x: (cursor.x - f64::from(origin.x)) / scale,
+        y: (cursor.y - f64::from(origin.y)) / scale,
+    }
+}
+
+pub fn get_cursor_position(window: &tauri::WebviewWindow) -> Result<CursorPosition, String> {
+    // 三个值都从原生窗口读取，跨屏和拖动后不沿用旧的窗口位置/DPI。
+    // 屏幕物理坐标先减客户区原点，再除缩放率，得到可与 DOMRect 对齐的坐标。
+    let cursor = window
+        .cursor_position()
+        .map_err(|error| error.to_string())?;
+    let origin = window.inner_position().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    Ok(logical_cursor_position(cursor, origin, scale))
+}
+
 pub fn get_settings(app: &AppHandle) -> Result<PetSettings, String> {
     let state = app.state::<PetState>();
     let settings = state.lock().map_err(|error| error.to_string())?;
@@ -76,5 +104,45 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 report_error(window.app_handle(), &error);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cursor_uses_client_origin_and_monitor_scale() {
+        assert_eq!(
+            logical_cursor_position(
+                tauri::PhysicalPosition::new(1440.0, 990.0),
+                tauri::PhysicalPosition::new(1200, 600),
+                1.5,
+            ),
+            CursorPosition { x: 160.0, y: 260.0 },
+        );
+    }
+
+    #[test]
+    fn cursor_supports_negative_screens_and_positions_outside_window() {
+        assert_eq!(
+            logical_cursor_position(
+                tauri::PhysicalPosition::new(-1920.0, -200.0),
+                tauri::PhysicalPosition::new(-1600, 100),
+                2.0,
+            ),
+            CursorPosition {
+                x: -160.0,
+                y: -150.0
+            },
+        );
+        assert_eq!(
+            logical_cursor_position(
+                tauri::PhysicalPosition::new(-1920.0, -200.0),
+                tauri::PhysicalPosition::new(-2000, -400),
+                1.0,
+            ),
+            CursorPosition { x: 80.0, y: 200.0 },
+        );
     }
 }

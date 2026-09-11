@@ -12,6 +12,8 @@ pnpm tauri dev
 
 接着读 [第三步：模型接入](../docs/learning/03-model.md) 和 [第四步：窗口与托盘](../docs/learning/04-desktop.md)。按住角色可拖动窗口；右键系统托盘图标打开菜单，左键显示桌宠。鼠标进入角色区域后显示工具栏，开发模式可打开“联调”。
 
+鼠标跟随默认开启：无需按键，头部、眼睛和身体会平滑朝向鼠标，鼠标移出桌宠窗口也会继续跟随。采样沿用 30/15 FPS 渲染循环，隐藏或最小化时一起暂停。坐标换算使用当前窗口的位置和屏幕缩放率。实现与验证说明见 [鼠标跟随](../docs/learning/06-mouse-follow.md)。
+
 ```powershell
 pnpm test
 pnpm build

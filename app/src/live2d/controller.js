@@ -3,8 +3,11 @@ import { join } from '@tauri-apps/api/path'
 import { exists, readTextFile } from '@tauri-apps/plugin-fs'
 import { Config, CubismSetting, Live2DSprite } from 'easy-live2d'
 import { Application } from 'pixi.js'
+import { getPetCursorPosition } from '../api/pet.js'
 import { findExpressionIndex, fitModel, getModelFiles } from './modelConfig.js'
+import { createMouseFollow } from './mouseFollow.js'
 
+// 使用桌面全局坐标驱动跟随，关闭库内需要按住鼠标的输入，避免两路目标相互覆盖。
 Config.MouseFollow = false
 Config.MotionSound = false
 Config.DebugLogEnable = import.meta.env.DEV
@@ -22,12 +25,16 @@ async function loadPet({ canvas, modelDirectory, signal }) {
   let app
   let model
   let detachProbe
+  let mouseFollow
+  const updateMouseFollow = () => { void mouseFollow.update() }
   let disposed = false
 
   function destroy() {
     if (disposed) return
     disposed = true
     app?.stop()
+    mouseFollow?.destroy()
+    app?.ticker.remove(updateMouseFollow)
     detachProbe?.()
     model?.destroy()
     // Canvas 属于 Vue，不让 Pixi 删除 DOM。
@@ -93,6 +100,17 @@ async function loadPet({ canvas, modelDirectory, signal }) {
 
     resize(canvas.clientWidth, canvas.clientHeight)
 
+    // easy-live2d 0.4.4 未公开 focus API；固定版本的 Cubism 模型提供 setDragging。
+    // 只设置目标，由 Cubism 平滑并在物理计算前叠加头、眼和身体参数，保留表情/呼吸。
+    if (typeof model._model?.setDragging !== 'function') throw new Error('当前 Live2D 运行库不支持视线跟随')
+    mouseFollow = createMouseFollow({
+      readPointer: getPetCursorPosition,
+      getBounds: () => canvas.getBoundingClientRect(),
+      setFocus: (x, y) => model._model.setDragging(x, y),
+      onError: cause => console.warn('[Live2D] 鼠标跟随暂时不可用，将自动重试：', cause),
+    })
+    app.ticker.add(updateMouseFollow)
+
     // 仅专项测量构建加载探针；正常发布版没有计数上报或采样定时器。
     if (import.meta.env.VITE_PERF_AUDIT === '1') {
       const { attachPerformanceProbe } = await import('./performanceProbe.js')
@@ -108,6 +126,7 @@ async function loadPet({ canvas, modelDirectory, signal }) {
       resize,
       setRunning(running) {
         if (disposed) return
+        mouseFollow.setRunning(running)
         if (running === app.ticker.started) return
         if (running) {
           model.resetTime()

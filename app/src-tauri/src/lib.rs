@@ -31,6 +31,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::request_expression,
             commands::get_pet_settings,
+            commands::get_pet_cursor_position,
             commands::set_pet_visible,
             commands::set_pet_max_fps,
             commands::set_pet_always_on_top,
