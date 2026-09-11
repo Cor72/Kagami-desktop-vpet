@@ -1,0 +1,28 @@
+Use case: ui-mockup, precise edit of the attached desktop-pet UI design preview.
+Edit the supplied concept image. Preserve its overall 1600x1000 landscape composition, pale lavender desktop wallpaper, warm-white pearl/frosted glass circular control material, purple typography, both anime character illustrations including pose/face/hair/costume/size/position, main title "八千代 · 气泡菜单", two side-by-side state presentation, and bottom behavior note. Change only the menu controls and their captions as specified.
+This is ONE design with two states. Exact user's corrections:
+1. The first-level menu now has exactly FIVE bubbles.
+2. Opening expression submenu HIDES ALL first-level buttons and REPLACES them IN THE EXACT SAME FIVE SLOTS. There must be no extra column, no root buttons or faded root icons remaining in the second state.
+3. Settings is a direct action that opens a separate settings window. It is NOT a submenu. Do not show a settings sub-menu or a settings window in this image; add only a concise note below the first state that clicking 设置 opens an independent window.
+
+LEFT STATE: header "一级菜单". Place a single column of FIVE evenly spaced pearl-white spherical buttons in a gentle outward vertical arc beside the character's right side. Fit all five within upper-shoulder through lower-skirt height, with generous margins, clear short labels under each. Use the same medium size for all five (~68px visual diameter in the final image), much smaller than the old three bubbles so they fit. Top-to-bottom labels and simple dark violet line icons:
+"表情" smile-face with a tiny right chevron (the ONLY item with a submenu chevron);
+"设置" gear icon, NO chevron;
+"置顶" pushpin icon, subtle small active indicator;
+"隐藏" crossed-eye icon;
+"退出" power icon, a restrained muted rose accent.
+Retain small close × affordance near the character above the arc. A normal arrow cursor points near the first bubble.
+Below left state caption exactly: "右键展开五个圆球".
+One smaller secondary caption: "设置 → 独立窗口".
+
+RIGHT STATE: header "二级菜单 · 表情". Preserve the identical character. Show ONLY five bubbles at exactly the same relative positions, spacing, size, and same single-arc footprint beside the character as the five bubbles in the left state. Top-to-bottom labels:
+"微笑" smiling-face icon;
+"眯眼" closed-smiling-eyes icon;
+"泪眼" watery-eyes icon;
+"泪滴" teardrop icon;
+"返回" left-arrow icon.
+No 表情, 设置, 置顶, 隐藏, 退出 root buttons in the right state. No separate second column, no 2x2 grid, no breadcrumb root control, no duplicated 返回. Preserve the small close × affordance in same location.
+Below right state caption exactly: "二级菜单原位替换一级菜单".
+One smaller secondary caption: "返回后恢复五个入口".
+
+Keep Chinese labels accurate and readable, line icons consistent, labels dark enough, no overlaps, no new character design, no new features, no rectangular cards behind bubbles. The background and character must stay unchanged except minor layout shifts strictly needed for five-button spacing. The critical visible relationship is exact reuse of the five arc positions across the two states. Use all available blank vertical space rather than crowding controls. Return one complete updated image.

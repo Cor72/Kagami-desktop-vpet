@@ -1,3 +1,4 @@
+use crate::menu_layout;
 use crate::settings::{PetSettings, PetState, SettingsChange};
 use crate::tray;
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent};
@@ -42,7 +43,6 @@ pub fn update_settings(app: &AppHandle, change: SettingsChange) -> Result<PetSet
     if matches!(change, SettingsChange::Visible(false)) && app.tray_by_id(tray::TRAY_ID).is_none() {
         return Err("托盘未就绪，暂时不能隐藏桌宠；可以直接退出".into());
     }
-
     let snapshot = {
         let state = app.state::<PetState>();
         let mut settings = state.lock().map_err(|error| error.to_string())?;
@@ -57,9 +57,17 @@ pub fn update_settings(app: &AppHandle, change: SettingsChange) -> Result<PetSet
         })?
     }; // 离开作用域就释放 Mutex 锁，再通知 Vue 和托盘。
 
+    // 隐藏或恢复完成后再排队重置，避免“先重置、后到达的打开请求、再隐藏”的竞态。
+    if matches!(change, SettingsChange::Visible(_)) {
+        menu_layout::reset_nonblocking(app);
+    }
+
     // 系统操作已经成功；通知失败记录错误，不伪装成系统操作失败。
     if let Err(error) = app.emit_to("main", "pet-settings-changed", &snapshot) {
         report_error(app, &format!("设置通知失败：{error}"));
+    }
+    if let Err(error) = app.emit_to("settings", "pet-settings-changed", &snapshot) {
+        report_error(app, &format!("设置窗口通知失败：{error}"));
     }
     if let Err(error) = tray::sync_menu(app, &snapshot) {
         report_error(app, &format!("托盘状态更新失败：{error}"));
@@ -89,11 +97,17 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         match window.is_minimized() {
             Ok(minimized) => {
                 let _ = window.emit("pet-window-minimized", minimized);
+                if minimized {
+                    menu_layout::reset_nonblocking(window.app_handle());
+                }
             }
             Err(error) => {
                 report_error(window.app_handle(), &format!("读取最小化状态失败：{error}"))
             }
         }
+    }
+    if matches!(event, WindowEvent::Focused(false)) {
+        menu_layout::reset_nonblocking(window.app_handle());
     }
     if let WindowEvent::CloseRequested { api, .. } = event {
         // 只有托盘创建成功，才允许关闭改为隐藏；显式退出不经过这里。
