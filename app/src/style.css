@@ -239,15 +239,17 @@ dd {
 .pet-stage canvas:active { cursor: grabbing; }
 .pet-stage canvas:focus-visible { outline: 2px dashed #b19bc3; outline-offset: -3px; border-radius: 16px; }
 /* 菜单是桌宠窗口内的一块普通 DOM：始终竖排在右侧，不参与窗口尺寸计算。
-   --menu-width 必须等于「锚点内容盒宽度 - 可见条带宽」，保证贴住视口右边缘。
-   外壳本身不接收指针事件，只有按钮接收，否则按钮右侧的空白条会挡住画布拖动。 */
+   与模型的距离由这里的 --menu-gap 控制（越大菜单越往左，离模型越远）；
+   模型本身是水平居中的，见 live2d/controller.js 的 placeModel/fitModel。
+   宽度按内容自适应，按钮改大小不需要再同步任何宽度常量。
+   外壳本身不接收指针事件，只有按钮接收，否则按钮之外的空白条会挡住画布拖动。 */
 .bubble-menu {
-  --menu-width: 100px;
+  --menu-gap: 0px;
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 0;
-  width: var(--menu-width);
+  right: var(--menu-gap);
+  width: max-content;
   display: flex;
   align-items: center;
   pointer-events: none;
@@ -256,23 +258,24 @@ dd {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 100%;
+  width: max-content;
 }
+/* 小号：只有图标，文字改为 title 悬浮提示显示。
+   按钮是正方形，圆球居中；改大小请让 .bubble-item 与 .bubble-orb 成对变化。 */
 .bubble-item {
   position: relative;
   pointer-events: auto;
   flex: 0 0 auto;
-  width: 62px;
-  height: 73px;
+  width: 52px;
+  height: 52px;
   margin: 0 auto;
   padding: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   background: transparent;
   color: #65457d;
-  border-radius: 28px 28px 10px 10px;
+  border-radius: 50%;
   animation: bubble-in 200ms both;
   animation-delay: calc(var(--slot) * 20ms);
 }
@@ -281,8 +284,9 @@ dd {
   position: relative;
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   border: 1px solid #ffffffeb;
   border-radius: 50%;
   background: radial-gradient(circle at 32% 20%, #fff 0, #faf7f2f2 48%, #e9dff0eb 100%);
@@ -295,9 +299,7 @@ dd {
 .bubble-item.selected .bubble-orb { background: radial-gradient(circle at 30% 15%, #faf4ff, #e4d3f0); color: #624078; }
 .bubble-item.danger:hover { color: #ac5265; }
 .bubble-item.danger:hover .bubble-orb { background: radial-gradient(circle at 30% 15%, #fff, #f6e2e9); }
-.bubble-label { font-size: 12px; line-height: 17px; font-weight: 500; white-space: nowrap; padding: 0 6px; border-radius: 8px; background: #faf7f2e8; box-shadow: 0 1px 4px #30213d12; }
-.bubble-chevron { position: absolute; right: 7px; top: 20px; }
-.bubble-dot { position: absolute; right: 2px; bottom: 3px; width: 8px; height: 8px; border-radius: 50%; background: #a6c6b4; border: 2px solid #fff; }
+.bubble-dot { position: absolute; right: 0; bottom: 2px; width: 8px; height: 8px; border-radius: 50%; background: #a6c6b4; border: 2px solid #fff; }
 .menu-layer-enter-active { transition: opacity 100ms ease; }
 .menu-layer-leave-active { transition: opacity 80ms ease; pointer-events: none; }
 .menu-layer-enter-from, .menu-layer-leave-to { opacity: 0; }

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowLeft, ChevronRight, Droplet, EyeOff, Frown, Laugh, Pin, Power, Settings, Smile } from '@lucide/vue'
+import { ArrowLeft, Droplet, EyeOff, Frown, Laugh, Pin, Power, Settings, Smile } from '@lucide/vue'
 import { getMenuItems } from '../composables/petMenu.js'
 
 const props = defineProps({
@@ -15,6 +15,11 @@ const items = computed(() => getMenuItems(props.state))
 const icons = { 'arrow-left': ArrowLeft, droplet: Droplet, 'eye-off': EyeOff, frown: Frown, laugh: Laugh, pin: Pin, power: Power, settings: Settings, smile: Smile }
 
 function focusFirst() { menu.value?.querySelector('button:not(:disabled)')?.focus({ preventScroll: true }) }
+// 文字不再常显，改为原生 title 悬浮提示；同时作为无障碍名称，常显的 aria-label 去掉。
+function tooltip(item) {
+  if (item.id === 'always-on-top') return props.alwaysOnTop ? '取消置顶' : '保持置顶'
+  return item.label
+}
 watch(open, async value => {
   if (!value) return
   await nextTick()
@@ -36,9 +41,8 @@ function navigate(event) {
   <nav v-if="open" ref="menu" class="bubble-menu" :aria-label="state === 'root' ? '桌宠一级菜单' : '表情菜单'" @pointerdown.stop @contextmenu.prevent.stop @keydown="navigate">
     <Transition name="menu-layer" mode="out-in" @before-leave="leaveLayer" @after-enter="focusFirst">
       <div :key="state" class="bubble-layer">
-        <button v-for="(item, index) in items" :key="item.id" class="bubble-item" :class="{ selected: item.id === 'always-on-top' && alwaysOnTop, danger: item.danger }" :style="{ '--slot': index }" type="button" :disabled="busy" :aria-label="item.id === 'always-on-top' ? (alwaysOnTop ? '取消置顶' : '保持置顶') : item.label" :aria-pressed="item.id === 'always-on-top' ? alwaysOnTop : undefined" :aria-haspopup="item.submenu ? 'menu' : undefined" @click.stop="emit('select', item.id)">
-          <span class="bubble-orb"><component :is="icons[item.icon]" :size="23" :stroke-width="1.65" aria-hidden="true" /><ChevronRight v-if="item.submenu" class="bubble-chevron" :size="10" aria-hidden="true" /><span v-if="item.id === 'always-on-top' && alwaysOnTop" class="bubble-dot" /></span>
-          <span class="bubble-label">{{ item.label }}</span>
+        <button v-for="(item, index) in items" :key="item.id" class="bubble-item" :class="{ selected: item.id === 'always-on-top' && alwaysOnTop, danger: item.danger }" :style="{ '--slot': index }" type="button" :disabled="busy" :title="tooltip(item)" :aria-label="tooltip(item)" :aria-pressed="item.id === 'always-on-top' ? alwaysOnTop : undefined" :aria-haspopup="item.submenu ? 'menu' : undefined" @click.stop="emit('select', item.id)">
+          <span class="bubble-orb"><component :is="icons[item.icon]" :size="20" :stroke-width="1.65" aria-hidden="true" /><span v-if="item.id === 'always-on-top' && alwaysOnTop" class="bubble-dot" /></span>
         </button>
       </div>
     </Transition>
