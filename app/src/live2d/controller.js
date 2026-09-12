@@ -93,9 +93,9 @@ async function loadPet({ canvas, modelDirectory, signal }) {
       app.renderer.resize(width, height)
       const layout = fitModel(size.width, size.height, width, height)
       // 八千代的原始画布留白较多；修改这个倍率即可调整角色大小。
-      const modelZoom = 2.6
+      const modelZoom = 4
       model.scale.set(layout.scale * modelZoom)
-      model.position.set(layout.x, layout.y)
+      model.position.set(layout.x, layout.y+140)
     }
 
     resize(canvas.clientWidth, canvas.clientHeight)
