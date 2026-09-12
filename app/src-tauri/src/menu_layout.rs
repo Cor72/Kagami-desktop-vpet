@@ -2,9 +2,9 @@ use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-pub const COMPACT_WIDTH: f64 = 300.0;
-pub const EXPANDED_WIDTH: f64 = 400.0;
-pub const WINDOW_HEIGHT: f64 = 400.0;
+pub const COMPACT_WIDTH: f64 = 340.0;
+pub const EXPANDED_WIDTH: f64 = 480.0;
+pub const WINDOW_HEIGHT: f64 = 440.0;
 const MENU_WIDTH: f64 = EXPANDED_WIDTH - COMPACT_WIDTH;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
