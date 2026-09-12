@@ -41,7 +41,7 @@ function navigate(event) {
   <nav v-if="open" ref="menu" class="bubble-menu" :aria-label="state === 'root' ? '桌宠一级菜单' : '表情菜单'" @pointerdown.stop @contextmenu.prevent.stop @keydown="navigate">
     <Transition name="menu-layer" mode="out-in" @before-leave="leaveLayer" @after-enter="focusFirst">
       <div :key="state" class="bubble-layer">
-        <button v-for="(item, index) in items" :key="item.id" class="bubble-item" :class="{ selected: item.id === 'always-on-top' && alwaysOnTop, danger: item.danger }" :style="{ '--slot': index }" type="button" :disabled="busy" :title="tooltip(item)" :aria-label="tooltip(item)" :aria-pressed="item.id === 'always-on-top' ? alwaysOnTop : undefined" :aria-haspopup="item.submenu ? 'menu' : undefined" @click.stop="emit('select', item.id)">
+        <button v-for="(item, index) in items" :key="item.id" class="bubble-item" :class="{ selected: item.id === 'always-on-top' && alwaysOnTop, danger: item.danger }" :style="{ '--slot': index }" type="button" :disabled="busy" :data-tooltip="tooltip(item)" :aria-label="tooltip(item)" :aria-pressed="item.id === 'always-on-top' ? alwaysOnTop : undefined" :aria-haspopup="item.submenu ? 'menu' : undefined" @click.stop="emit('select', item.id)">
           <span class="bubble-orb"><component :is="icons[item.icon]" :size="20" :stroke-width="1.65" aria-hidden="true" /><span v-if="item.id === 'always-on-top' && alwaysOnTop" class="bubble-dot" /></span>
         </button>
       </div>

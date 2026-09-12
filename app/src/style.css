@@ -300,6 +300,30 @@ dd {
 .bubble-item.danger:hover { color: #ac5265; }
 .bubble-item.danger:hover .bubble-orb { background: radial-gradient(circle at 30% 15%, #fff, #f6e2e9); }
 .bubble-dot { position: absolute; right: 0; bottom: 2px; width: 8px; height: 8px; border-radius: 50%; background: #a6c6b4; border: 2px solid #fff; }
+/* 悬浮提示：不用原生 title，因为系统 tooltip 有一圈无法通过 CSS 调细的深色边框。
+   改为 ::after 自绘，提示框出现在按钮左侧（右侧是窗口边缘，会被裁掉）。 */
+.bubble-item::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 7px;
+  /* border: 1px solid #e7dfed; */
+  background: #fffdff;
+  color: #65457d;
+  font-size: 12px;
+  line-height: 16px;
+  box-shadow: 0 2px 8px #46315420;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.bubble-item:hover:not(:disabled)::after,
+.bubble-item:focus-visible::after { opacity: 1; }
 .menu-layer-enter-active { transition: opacity 100ms ease; }
 .menu-layer-leave-active { transition: opacity 80ms ease; pointer-events: none; }
 .menu-layer-enter-from, .menu-layer-leave-to { opacity: 0; }
