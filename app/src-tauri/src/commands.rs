@@ -1,7 +1,6 @@
 use crate::{
     desktop,
     expression::validate_expression,
-    menu_layout::{self, MenuLayout},
     settings::{PetSettings, SettingsChange},
     settings_window,
 };
@@ -28,7 +27,6 @@ pub async fn get_pet_cursor_position(
 
 #[tauri::command]
 pub async fn set_pet_visible(app: tauri::AppHandle, visible: bool) -> Result<PetSettings, String> {
-    menu_layout::reset(app.clone()).await?;
     desktop::update_settings(&app, SettingsChange::Visible(visible))
 }
 
@@ -65,27 +63,23 @@ pub fn request_expression(app: tauri::AppHandle, name: String) -> Result<(), Str
 }
 
 #[tauri::command]
-pub async fn set_pet_menu_open(app: tauri::AppHandle, open: bool) -> Result<MenuLayout, String> {
-    menu_layout::set_open(app, open).await
-}
-
-#[tauri::command]
 pub async fn open_pet_settings(app: tauri::AppHandle) -> Result<(), String> {
     settings_window::open(app).await
 }
 
 #[tauri::command]
-pub fn reload_pet_model(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn reload_pet_model(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    {
-        return app
-            .emit_to("main", "pet-model-reload", ())
-            .map_err(|error| error.to_string());
-    }
+    app.emit_to("main", "pet-model-reload", ())
+        .map_err(|error| error.to_string())?;
 
+    // 发布版不注册重载入口；保留函数以便两个构建共用同一份命令注册表。
     #[cfg(not(debug_assertions))]
     {
         let _ = app;
-        Err("模型重载仅在开发版本中可用".into())
+        return Err("模型重载仅在开发版本中可用".into());
     }
+
+    #[cfg(debug_assertions)]
+    Ok(())
 }
