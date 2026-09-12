@@ -238,16 +238,33 @@ dd {
 
 .pet-stage canvas:active { cursor: grabbing; }
 .pet-stage canvas:focus-visible { outline: 2px dashed #b19bc3; outline-offset: -3px; border-radius: 16px; }
-.bubble-menu { position: absolute; top: 0; width: 140px; height: 440px; }
-.menu-right { left: 340px; }
-.menu-left { left: 0; }
-.bubble-layer { position: absolute; inset: 0; }
-.bubble-item {
+/* 菜单是桌宠窗口内的一块普通 DOM：始终竖排在右侧，不参与窗口尺寸计算。
+   --menu-width 必须等于「锚点内容盒宽度 - 可见条带宽」，保证贴住视口右边缘。
+   外壳本身不接收指针事件，只有按钮接收，否则按钮右侧的空白条会挡住画布拖动。 */
+.bubble-menu {
+  --menu-width: 100px;
   position: absolute;
-  top: calc(22px + var(--slot) * 82px);
-  left: calc(18px + var(--arc));
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--menu-width);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.bubble-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.bubble-item {
+  position: relative;
+  pointer-events: auto;
+  flex: 0 0 auto;
   width: 62px;
   height: 73px;
+  margin: 0 auto;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -259,7 +276,6 @@ dd {
   animation: bubble-in 200ms both;
   animation-delay: calc(var(--slot) * 20ms);
 }
-.menu-left .bubble-item { left: calc(60px - var(--arc)); }
 .bubble-item:hover:not(:disabled) { background: transparent; }
 .bubble-orb {
   position: relative;
@@ -282,12 +298,6 @@ dd {
 .bubble-label { font-size: 12px; line-height: 17px; font-weight: 500; white-space: nowrap; padding: 0 6px; border-radius: 8px; background: #faf7f2e8; box-shadow: 0 1px 4px #30213d12; }
 .bubble-chevron { position: absolute; right: 7px; top: 20px; }
 .bubble-dot { position: absolute; right: 2px; bottom: 3px; width: 8px; height: 8px; border-radius: 50%; background: #a6c6b4; border: 2px solid #fff; }
-.menu-compact { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #b19bc3 transparent; }
-.menu-compact .bubble-layer { position: relative; min-height: 240px; padding: 4px 10px; display: flex; flex-direction: column; gap: 2px; }
-.menu-compact .bubble-item { position: relative; top: auto; left: auto; flex: 0 0 44px; width: 112px; height: 44px; flex-direction: row; gap: 8px; border-radius: 24px; }
-.menu-compact .bubble-orb { width: 38px; height: 38px; flex-shrink: 0; }
-.menu-compact .bubble-chevron { right: 3px; top: 14px; }
-.menu-compact .bubble-label { padding: 2px 5px; }
 .menu-layer-enter-active { transition: opacity 100ms ease; }
 .menu-layer-leave-active { transition: opacity 80ms ease; pointer-events: none; }
 .menu-layer-enter-from, .menu-layer-leave-to { opacity: 0; }

@@ -3,7 +3,6 @@ mod audit;
 mod commands;
 mod desktop;
 mod expression;
-mod menu_layout;
 mod settings;
 mod settings_window;
 mod tray;
@@ -15,7 +14,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .manage(settings::PetState::default())
-        .manage(menu_layout::MenuLayoutStore::default())
         .manage(settings_window::SettingsWindowStore::default())
         .setup(|app| {
             if let Err(error) = tray::create(app.handle()) {
@@ -37,7 +35,6 @@ pub fn run() {
             commands::reload_pet_model,
             commands::get_pet_settings,
             commands::get_pet_cursor_position,
-            commands::set_pet_menu_open,
             commands::open_pet_settings,
             commands::set_pet_visible,
             commands::set_pet_max_fps,
