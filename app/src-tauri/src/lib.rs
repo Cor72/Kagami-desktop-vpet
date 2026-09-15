@@ -1,6 +1,9 @@
+mod ai;
 #[cfg(feature = "perf-audit")]
 mod audit;
 mod broadcast;
+mod chat;
+mod chat_store;
 mod chat_window;
 mod clock;
 mod commands;
@@ -23,6 +26,8 @@ pub fn run() {
         .manage(settings_window::SettingsWindowStore::default())
         .manage(chat_window::ChatWindowStore::default())
         .manage(desktop::StartupNotices::default())
+        .manage(ai::AiState::default())
+        .manage(chat::ChatState::default())
         .setup(|app| {
             if let Err(error) = tray::create(app.handle()) {
                 eprintln!("[Rust] 托盘创建失败，恢复普通窗口：{error}");
@@ -35,6 +40,8 @@ pub fn run() {
             }
             // 托盘就绪之后再恢复设置：恢复的最后一步要同步托盘勾选状态。
             desktop::restore_settings(app.handle());
+            // AI 配置与设置同源：先恢复内存状态，命令表才能读到磁盘上的值。
+            ai::restore(app.handle());
             #[cfg(feature = "perf-audit")]
             audit::start(app.handle());
             Ok(())
@@ -53,7 +60,61 @@ pub fn run() {
             commands::set_pet_max_fps,
             commands::set_pet_always_on_top,
             commands::quit_pet,
+            commands::get_ai_config,
+            commands::set_ai_config,
+            commands::set_api_key,
+            commands::clear_api_key,
+            commands::test_ai_connection,
+            commands::create_session,
+            commands::list_sessions,
+            commands::get_messages,
+            commands::send_message,
+            commands::cancel_stream,
         ])
         .run(tauri::generate_context!())
         .expect("启动八千代桌宠失败");
+}
+
+#[cfg(test)]
+mod tests {
+    /// 回归测试：`manage()` 注册的每个状态类型都必须**互不相同**。
+    ///
+    /// M1 交付时程序启动即 panic，原因就是两个窗口守卫都写成了 `Mutex<()>` 的裸
+    /// type 别名——Rust 的别名是透明的，Tauri 的 `manage()` 按 `TypeId` 存状态，
+    /// 第二次注册同一个类型就崩。这个 panic 只在真跑程序时出现，`cargo test` 与
+    /// `cargo build` 都抓不到，所以在这里用类型层面把它们钉住。
+    #[test]
+    fn managed_states_are_distinct_types() {
+        let types: Vec<(&str, std::any::TypeId)> = vec![
+            (
+                "settings::PetState",
+                std::any::TypeId::of::<crate::settings::PetState>(),
+            ),
+            (
+                "settings_window::SettingsWindowStore",
+                std::any::TypeId::of::<crate::settings_window::SettingsWindowStore>(),
+            ),
+            (
+                "chat_window::ChatWindowStore",
+                std::any::TypeId::of::<crate::chat_window::ChatWindowStore>(),
+            ),
+            (
+                "desktop::StartupNotices",
+                std::any::TypeId::of::<crate::desktop::StartupNotices>(),
+            ),
+            ("ai::AiState", std::any::TypeId::of::<crate::ai::AiState>()),
+            (
+                "chat::ChatState",
+                std::any::TypeId::of::<crate::chat::ChatState>(),
+            ),
+        ];
+        for (index, (left_name, left)) in types.iter().enumerate() {
+            for (right_name, right) in types.iter().skip(index + 1) {
+                assert_ne!(
+                    left, right,
+                    "{left_name} 与 {right_name} 是同一个 Rust 类型，manage() 会在启动时 panic"
+                );
+            }
+        }
+    }
 }

@@ -1,5 +1,10 @@
 use crate::{
-    broadcast, chat_window, desktop,
+    ai::{
+        self,
+        config::{AiConfigPatch, AiConfigView, Provider},
+        secret,
+    },
+    broadcast, chat, chat_store, chat_window, clock, desktop,
     expression::validate_expression,
     settings::{PetSettings, SettingsChange},
     settings_window,
@@ -89,4 +94,101 @@ pub async fn reload_pet_model(app: tauri::AppHandle) -> Result<(), String> {
 
     #[cfg(debug_assertions)]
     Ok(())
+}
+
+// ---------- AI 配置与 API Key ----------
+
+/// 前端的 AI 设置快照：配置 + `hasKey` + 掩码。**没有 Key 本身。**
+#[tauri::command]
+pub fn get_ai_config(app: tauri::AppHandle) -> Result<AiConfigView, String> {
+    let config = ai::get_config(&app)?;
+    ai::view(&config)
+}
+
+#[tauri::command]
+pub fn set_ai_config(app: tauri::AppHandle, patch: AiConfigPatch) -> Result<AiConfigView, String> {
+    let config = ai::update_config(&app, patch)?;
+    ai::view(&config)
+}
+
+/// 保存 API Key。**不返回 Key，也不回显**——只回新的掩码。
+#[tauri::command]
+pub fn set_api_key(
+    app: tauri::AppHandle,
+    provider: Provider,
+    key: String,
+) -> Result<AiConfigView, String> {
+    secret::save(provider, &key)?;
+    publish_ai_config(&app)
+}
+
+#[tauri::command]
+pub fn clear_api_key(app: tauri::AppHandle, provider: Provider) -> Result<AiConfigView, String> {
+    secret::clear(provider)?;
+    publish_ai_config(&app)
+}
+
+/// Key 变了，掩码也就变了：广播一份新快照给设置窗口与对话窗口。
+fn publish_ai_config(app: &tauri::AppHandle) -> Result<AiConfigView, String> {
+    let config = ai::get_config(app)?;
+    ai::broadcast_config(app, &config);
+    ai::view(&config)
+}
+
+#[tauri::command]
+pub async fn test_ai_connection(app: tauri::AppHandle) -> Result<ai::TestOutcome, String> {
+    Ok(ai::test_connection(&app).await)
+}
+
+// ---------- 对话与会话 ----------
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SentMessage {
+    /// 助手那条消息的 id：前端把它当流式增量的落点。
+    pub message_id: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct CancelResult {
+    pub ok: bool,
+}
+
+#[tauri::command]
+pub fn create_session(app: tauri::AppHandle) -> Result<chat_store::Session, String> {
+    let store = chat_store::store(&app)?;
+    chat_store::create(&store, clock::now_ms())
+}
+
+#[tauri::command]
+pub fn list_sessions(app: tauri::AppHandle) -> Result<Vec<chat_store::Session>, String> {
+    let store = chat_store::store(&app)?;
+    Ok(chat_store::list(&store))
+}
+
+#[tauri::command]
+pub fn get_messages(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Vec<chat_store::Message>, String> {
+    let store = chat_store::store(&app)?;
+    Ok(chat_store::load(&store, &session_id)?.messages)
+}
+
+/// 发一条消息。**立刻返回**助手消息的 id，回答通过 `chat-stream-*` 事件陆续到达。
+#[tauri::command]
+pub async fn send_message(
+    app: tauri::AppHandle,
+    session_id: String,
+    text: String,
+) -> Result<SentMessage, String> {
+    let message_id = chat::send(app, &session_id, &text).await?;
+    Ok(SentMessage { message_id })
+}
+
+#[tauri::command]
+pub fn cancel_stream(app: tauri::AppHandle, session_id: String) -> Result<CancelResult, String> {
+    Ok(CancelResult {
+        ok: chat::cancel(&app, &session_id),
+    })
 }

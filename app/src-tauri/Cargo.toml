@@ -19,3 +19,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "=2.11.3", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-fs = "=2.5.2"
+# AI 对话：HTTP + SSE 流式读取。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+futures-util = "0.3"
+# CancellationToken：用户点「停止」时中断正在进行的流。
+tokio-util = "0.7"
+# API Key 存 Windows 凭据管理器。v3 起不再有默认后端，必须显式选平台实现。
+keyring = { version = "3", features = ["windows-native"] }

@@ -177,6 +177,14 @@ pub fn on_page_load(
 }
 
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
+    // 对话窗口关闭：没人收流式事件了，正在跑的请求也一起停掉。
+    // 既省 token，也避免一条回答只在历史里写下一半却没人知道原因。
+    if window.label() == crate::chat_window::CHAT_LABEL {
+        if matches!(event, WindowEvent::Destroyed) {
+            crate::chat::cancel_all(window.app_handle());
+        }
+        return;
+    }
     if window.label() != "main" {
         return;
     }

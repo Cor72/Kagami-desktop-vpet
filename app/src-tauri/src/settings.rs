@@ -134,12 +134,16 @@ impl PetSettings {
 
 /// 应用数据目录：交给 Tauri 按 `tauri.conf.json` 的 identifier 解析，
 /// 不写程序目录，避免权限问题与更新时被清掉。
-pub fn store(app: &AppHandle) -> Result<Store, String> {
-    let dir = app
-        .path()
+///
+/// 设置、AI 配置、对话历史都落在这里，只是文件名不同。
+pub fn data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
         .app_data_dir()
-        .map_err(|error| format!("读取应用数据目录失败：{error}"))?;
-    Ok(Store::new(dir))
+        .map_err(|error| format!("读取应用数据目录失败：{error}"))
+}
+
+pub fn store(app: &AppHandle) -> Result<Store, String> {
+    Ok(Store::new(data_dir(app)?))
 }
 
 /// 启动时读取设置。
