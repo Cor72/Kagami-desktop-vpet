@@ -1,6 +1,7 @@
 # 八千代桌宠 v2：番茄钟 · 养成 · AI Agent · 工作区对话（设计方案与实施计划）
 
 日期：2026-09-12。状态：待用户确认第十一节关键决策后进入 Phase 7。
+（fork 上 **Phase 7 已实现**，见第七节完成记录；第十一节的决策点仍未确认——Phase 7 是纯底座，不依赖其中任何一条。）
 前置：[最小实现设计](2026-09-10-yachiyo-mvp-design.md)、[MVP 计划](../plans/2026-09-10-yachiyo-mvp.md)、[气泡菜单计划](../plans/2026-09-11-bubble-menu.md)。
 
 ---
@@ -362,13 +363,31 @@ app/src-tauri/src/
 
 **文件**：新增 `store.rs`、`clock.rs`、`broadcast.rs`；修改 `settings.rs`、`desktop.rs`、`lib.rs`。
 
-- [ ] `store.rs`：`load<T: DeserializeOwned + Default>` / `save<T: Serialize>`，原子写 + `.bak` + 解析失败回退默认值，并 `report_error`。
-- [ ] 把 `PetSettings` 接入持久化：启动读取，修改后写入。**验证「重启后设置保留」**（这是 v1 遗留的已知缺口）。
-- [ ] 为损坏文件写测试：主文件内容非法 → 回退 `.bak`；两者都非法 → 回退默认值且不 panic。
-- [ ] `clock.rs`：`now_ms()` 可注入，测试里替换为固定值。
-- [ ] `broadcast.rs`：把「发往 main / settings」的重复代码收成一处，新窗口只需注册 label。
-- [ ] 验收：改帧率 → 退出 → 重启，帧率保持；手工把 `settings.json` 改坏，程序仍能启动并给出错误提示。
+- [x] `store.rs`：`load<T: DeserializeOwned + Default>` / `save<T: Serialize>`，原子写 + `.bak` + 解析失败回退默认值，并 `report_error`。
+- [x] 把 `PetSettings` 接入持久化：启动读取，修改后写入。**验证「重启后设置保留」**（这是 v1 遗留的已知缺口）。
+- [x] 为损坏文件写测试：主文件内容非法 → 回退 `.bak`；两者都非法 → 回退默认值且不 panic。
+- [x] `clock.rs`：`now_ms()` 可注入，测试里替换为固定值。
+- [x] `broadcast.rs`：把「发往 main / settings」的重复代码收成一处，新窗口只需注册 label。
+- [x] 验收：改帧率 → 退出 → 重启，帧率保持；手工把 `settings.json` 改坏，程序仍能启动并给出错误提示。
 - [ ] 学习练习：用户手动编辑 `settings.json` 里的 `maxFps`，观察重启后的行为与校验。
+
+> **Phase 7 完成记录（2026-09-15，实现于 fork）**
+>
+> 改动：新增 `store.rs` / `clock.rs` / `broadcast.rs`，修改 `settings.rs` / `desktop.rs` / `commands.rs` / `lib.rs` / `Cargo.toml`（`serde_json` 由可选依赖改为常规依赖）。
+> 测试：`cargo test` 27 项全过（新增 15 项），`cargo clippy --all-targets -- -D warnings` 与 `cargo fmt --check` 干净。
+>
+> **实现时定的三件事**（都偏离或细化了原文，供复核）：
+>
+> 1. **落盘的文件用信封格式**：`{"schemaVersion": 1, "data": {...}}`。`schemaVersion` 不进业务结构体，前端快照不会多出无关字段；将来 `profile.json` / `pomodoro.json` 共用同一套读写与版本判断。
+> 2. **`revision` 与 `visible` 不落盘**。`revision` 是本次运行内的次序标记；`visible` 是会话状态——启动一律可见，否则托盘创建失败时窗口既不在屏幕上也没法找回。因此文件里只有 `maxFps` 与 `alwaysOnTop` 两项，正好是「跨重启有意义」的那部分。
+> 3. **文件损坏或值非法时保留现场**：回退到默认值并上报，但**不**覆盖用户改过的那一份。只有「文件不存在」才写默认值（让文件可被发现、可被手工编辑）。`maxFps=60` 这类非法值在读取时重新校验，回退默认值并说明原因。
+>
+> **两处补充**（原文没写，实现时认为必要）：
+>
+> - 读取时剥掉 UTF-8 BOM：这个文件是给人改的，部分编辑器保存时带 BOM，不处理就会「只改了一个数字却看到设置被重置」。
+> - 启动期（页面挂载前）的提示先进 `StartupNotices` 队列，由 `Builder::on_page_load` 在主窗口加载完成后补发。`setup` 里直接 emit 的事件没有监听者，会被丢掉。
+>
+> **未端到端验证**：`.bak` 回退只有单元测试覆盖。`.bak` 只在设置真正变更时才产生（需要托盘或 UI 操作），本轮用「改文件 + 重启」无法触发它。
 
 ### Phase 8：番茄钟
 

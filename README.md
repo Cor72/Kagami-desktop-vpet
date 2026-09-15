@@ -54,6 +54,30 @@ pnpm tauri dev
 
 开发模式下窗口底部额外提供「开发联调」与「重新加载模型」两个按钮（发布版不含）。
 
+### 设置文件
+
+设置会落盘、重启后保留（v1 遗留的「重启恢复默认值」缺口已修掉）。文件在 Tauri 的应用数据目录：
+
+```text
+%APPDATA%\com.yachiyo.desktop\settings.json
+```
+
+```json
+{
+  "schemaVersion": 1,
+  "data": {
+    "maxFps": 30,
+    "alwaysOnTop": true
+  }
+}
+```
+
+- 文件里只放**跨重启有意义**的两项：`maxFps`（只接受 15 / 30）与 `alwaysOnTop`。显示/隐藏属于会话状态，启动时一律可见——否则托盘一旦创建失败，窗口既不在屏幕上也没法从托盘找回来。
+- 可以手工编辑，重启后生效。非法值（例如 `maxFps: 60`）会被拒绝并回退默认值，同时在启动时提示原因。
+- 写入是原子的：先写 `settings.json.tmp`，把旧内容留一份 `settings.json.bak`，最后改名覆盖。
+- 读取顺序是主文件 → `.bak` → 默认值。**文件损坏不会让程序起不来**，而且会保留现场（不覆盖你改坏的那份），只上报原因。
+- 启动期（页面还没挂载）的提示会先排队，等主窗口加载完成再显示，避免那句话落到没人听的地方。
+
 ### 托盘与常驻
 
 - 托盘菜单：显示/隐藏、置顶、四种表情、30/15 FPS、退出
@@ -121,7 +145,10 @@ app/
       ├─ commands.rs              前端可调用的 Rust 入口
       ├─ desktop.rs               显示/隐藏/置顶、光标换算、错误上报
       ├─ expression.rs            表情白名单校验
-      ├─ settings.rs              运行时设置（Mutex + revision）
+      ├─ settings.rs              运行时设置（Mutex + revision）+ 读写 settings.json
+      ├─ store.rs                 通用文件存储：原子写 + .bak + 损坏回退（只用 std，可直接单测）
+      ├─ clock.rs                 可注入时钟（Phase 8 番茄钟用；生产用系统时钟，测试手动推进）
+      ├─ broadcast.rs             统一事件广播：新窗口只需在标签表里加一行
       ├─ settings_window.rs       设置窗口的单例创建守卫
       ├─ tray.rs                  原生托盘菜单
       └─ audit.rs                 可选性能验收模块（perf-audit 特性）
@@ -205,7 +232,7 @@ node scripts/summarize-performance.mjs ../docs/performance/my-run
 5. **`bundle.active` 为 `false`**（`tauri.conf.json`），因此不带参数的 `pnpm tauri build` 只产出裸 exe；要生成安装包需显式传 `--bundles nsis`。
 6. **依赖补丁不能丢**：`patches/easy-live2d@0.4.4.patch` 修复了上游库的加载错误传播、并行贴图失败时的清理时序、底层模型释放与动画时钟。请保留补丁文件、`pnpm-workspace.yaml` 与锁文件。
 7. **`pnpm test` 的脚本是显式文件列表**，新增测试目录时要同步修改 `package.json`。
-8. **未完成的人工验收项**：托盘完整交互、手动拖动、系统关闭按钮转隐藏、跨不同缩放显示器的拖动（本机只有一个显示器）。
+8. **未完成的人工验收项**：托盘完整交互、手动拖动、系统关闭按钮转隐藏、跨不同缩放显示器的拖动（本机只有一个显示器）。另外 `settings.json` 的 `.bak` 回退路径目前只有单元测试覆盖——`.bak` 只在设置真正变更时才产生，需要点托盘或设置窗口才能触发，尚未用安装版端到端演练。
 
 ## 相关文档
 

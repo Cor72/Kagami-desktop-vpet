@@ -1,11 +1,10 @@
 use crate::{
-    desktop,
+    broadcast, desktop,
     expression::validate_expression,
     settings::{PetSettings, SettingsChange},
     settings_window,
 };
 use serde::Serialize;
-use tauri::Emitter;
 
 // Serialize 让 Tauri 可以把这个 Rust 结构体转换成事件中的 JSON 对象。
 #[derive(Clone, Serialize)]
@@ -54,10 +53,14 @@ pub fn request_expression(app: tauri::AppHandle, name: String) -> Result<(), Str
     validate_expression(&name)?;
 
     let payload = ExpressionRequested { name };
-    app.emit_to("main", "pet-expression-requested", &payload)
-        .map_err(|error| error.to_string())?;
-    if let Err(error) = app.emit_to("settings", "pet-expression-observed", payload) {
-        desktop::report_error(&app, &format!("表情反馈通知失败：{error}"));
+    // 主窗口必须收到：真的换表情的是它，收不到就是故障，直接返回错误。
+    broadcast::emit(&app, broadcast::MAIN, "pet-expression-requested", &payload)?;
+    // 其余窗口只是「顺带同步一下显示」，没开就跳过。
+    // 用「除主窗口外全部」而不是写死 settings：以后加对话窗口会自动拿到这份同步。
+    for failure in
+        broadcast::emit_all_except(&app, broadcast::MAIN, "pet-expression-observed", &payload)
+    {
+        desktop::report_error(&app, &format!("表情反馈通知失败：{failure}"));
     }
     Ok(())
 }
@@ -70,8 +73,7 @@ pub async fn open_pet_settings(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn reload_pet_model(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    app.emit_to("main", "pet-model-reload", ())
-        .map_err(|error| error.to_string())?;
+    broadcast::emit(&app, broadcast::MAIN, "pet-model-reload", &())?;
 
     // 发布版不注册重载入口；保留函数以便两个构建共用同一份命令注册表。
     #[cfg(not(debug_assertions))]
