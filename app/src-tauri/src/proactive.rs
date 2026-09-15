@@ -113,18 +113,24 @@ pub struct AppRule {
     pub lines: &'static [&'static str],
 }
 
-/// 内置映射表的起步清单（计划 §8.5）。文案规则：陈述句、不评价、不催促、不给建议。
+/// 内置映射表的起步清单（计划 §8.5）。
+///
+/// 文案规则（角色依据见 `docs/八千代角色设定.md`）：**陈述句、短、不评价、不催促、不给建议**。
+/// 「神明大人」是她的招牌称呼，但要克制——每句都喊就腻了。
+///
+/// 同一分类下的几条规则**用同一份文案数组**：轮换是按分类走的
+/// （`rotation_key` 取的是 `Category::key()`），数组长度不一致会让同一个分类里的
+/// 轮换位置对不齐。要加文案就整组一起加。
 pub const APP_RULES: &[AppRule] = &[
     AppRule {
         process: "Code.exe",
         category: Category::Editor,
         title: TitleUse::EditorFile,
         lines: &[
-            "编辑器打开了：{detail}",
-            "屏幕上是 {detail}",
-            "又打开了一个文件：{detail}",
+            "神明大人在敲代码",
+            "又是 {detail} 呀",
+            "{detail}，我认得它",
             "编辑器亮起来了",
-            "又回到代码这边",
         ],
     },
     AppRule {
@@ -132,8 +138,9 @@ pub const APP_RULES: &[AppRule] = &[
         category: Category::Editor,
         title: TitleUse::EditorFile,
         lines: &[
-            "编辑器打开了：{detail}",
-            "又打开了一个文件：{detail}",
+            "神明大人在敲代码",
+            "又是 {detail} 呀",
+            "{detail}，我认得它",
             "编辑器亮起来了",
         ],
     },
@@ -142,8 +149,9 @@ pub const APP_RULES: &[AppRule] = &[
         category: Category::Editor,
         title: TitleUse::EditorFile,
         lines: &[
-            "编辑器打开了：{detail}",
-            "又打开了一个文件：{detail}",
+            "神明大人在敲代码",
+            "又是 {detail} 呀",
+            "{detail}，我认得它",
             "编辑器亮起来了",
         ],
     },
@@ -152,8 +160,9 @@ pub const APP_RULES: &[AppRule] = &[
         category: Category::Editor,
         title: TitleUse::EditorFile,
         lines: &[
-            "编辑器打开了：{detail}",
-            "又打开了一个文件：{detail}",
+            "神明大人在敲代码",
+            "又是 {detail} 呀",
+            "{detail}，我认得它",
             "编辑器亮起来了",
         ],
     },
@@ -161,56 +170,59 @@ pub const APP_RULES: &[AppRule] = &[
         process: "chrome.exe",
         category: Category::Browser,
         title: TitleUse::Discard,
-        lines: &["浏览器打开了", "又见浏览器", "打开了浏览器"],
+        lines: &["神明大人去网上看看", "又见浏览器", "浏览器打开了"],
     },
     AppRule {
         process: "msedge.exe",
         category: Category::Browser,
         title: TitleUse::Discard,
-        lines: &["浏览器打开了", "又见浏览器", "打开了浏览器"],
+        lines: &["神明大人去网上看看", "又见浏览器", "浏览器打开了"],
     },
     AppRule {
         process: "firefox.exe",
         category: Category::Browser,
         title: TitleUse::Discard,
-        lines: &["浏览器打开了", "又见浏览器", "打开了浏览器"],
+        lines: &["神明大人去网上看看", "又见浏览器", "浏览器打开了"],
     },
     AppRule {
         process: "cloudmusic.exe",
         category: Category::Music,
         title: TitleUse::Discard,
-        lines: &["音乐响起来了", "开始听歌了", "音乐软件打开了"],
+        lines: &["音乐响起来了", "开始听歌了", "神明大人开始听歌"],
     },
     AppRule {
         process: "QQMusic.exe",
         category: Category::Music,
         title: TitleUse::Discard,
-        lines: &["音乐响起来了", "开始听歌了", "音乐软件打开了"],
+        lines: &["音乐响起来了", "开始听歌了", "神明大人开始听歌"],
     },
     AppRule {
         process: "Spotify.exe",
         category: Category::Music,
         title: TitleUse::Discard,
-        lines: &["音乐响起来了", "开始听歌了", "音乐软件打开了"],
+        lines: &["音乐响起来了", "开始听歌了", "神明大人开始听歌"],
     },
     AppRule {
         process: "GenshinImpact.exe",
         category: Category::Game,
         title: TitleUse::Discard,
-        lines: &["游戏启动了", "打开了游戏", "开始打游戏了"],
+        lines: &["开始打游戏了", "神明大人玩得开心", "我就在旁边看着"],
     },
     AppRule {
         process: "Yuanshen.exe",
         category: Category::Game,
         title: TitleUse::Discard,
-        lines: &["游戏启动了", "打开了游戏", "开始打游戏了"],
+        lines: &["开始打游戏了", "神明大人玩得开心", "我就在旁边看着"],
     },
 ];
 
-/// 闲置问候：用户离开了。陈述句，不问「还在吗」——问句会制造回应的义务。
-const IDLE_LINES: &[&str] = &["这儿安静下来了", "先在这儿待着", "我自己待一会儿"];
-/// 回到活跃：用户回来了。
-const BACK_LINES: &[&str] = &["回来啦", "你回来了", "欢迎回来"];
+/// 闲置问候：用户离开了。
+///
+/// 不写「你去哪儿了」这类话——她不是在等一个解释，只是说一句自己在。
+/// 也不写「还在吗」——问句会制造回应的义务，而这条气泡本来就不需要回应。
+const IDLE_LINES: &[&str] = &["神明大人先忙别的去了", "这儿安静下来了", "我在这儿等着"];
+/// 回到活跃：用户回来了。高兴，但不夸张。
+const BACK_LINES: &[&str] = &["神明大人回来了", "回来啦", "欢迎回来"];
 
 // ---------- 输入 ----------
 
@@ -1207,6 +1219,26 @@ mod tests {
                     "{name} 的文案太长（不含文件名应 ≤ 20 字，实际 {width}）：{line}"
                 );
             }
+        }
+    }
+
+    /// 「神明大人」是她的招牌称呼，但每句都喊就腻了。同一张表里不超过一半。
+    #[test]
+    fn the_honorific_is_used_with_restraint() {
+        let mut tables: Vec<(&str, &[&str])> = vec![("闲置", IDLE_LINES), ("回来", BACK_LINES)];
+        for rule in APP_RULES {
+            tables.push((rule.process, rule.lines));
+        }
+        for (name, lines) in tables {
+            let with_name = lines
+                .iter()
+                .filter(|line| line.contains("神明大人"))
+                .count();
+            assert!(
+                with_name * 2 <= lines.len(),
+                "{name} 里「神明大人」出现得太频繁（{with_name}/{}）——每句都喊就腻了",
+                lines.len()
+            );
         }
     }
 
