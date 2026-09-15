@@ -422,3 +422,49 @@ body.chat-window, .chat-window #app { background: #f7f4f9; }
 .ai-status.ok { color: #3f7a5c; }
 .ai-status.fail { color: #a33142; }
 .ai-card .error { margin-top: 10px; font-size: 11px; }
+
+/* ---------- 主动互动的文字气泡 ----------
+   与气泡菜单同一条约束：它只是桌宠窗口内的一块普通 DOM，**不改变窗口尺寸**
+   （340×440 是硬约束）。位置在模型上方，并刻意避开右侧的菜单条（right 留出 62px）。
+   根节点不接收指针事件、只有气泡本体接收，否则气泡之外的透明区域会挡住画布拖动。 */
+.pet-speech {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 62px;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+.pet-speech-body {
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: #fffdfff2;
+  color: #3d3545;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  box-shadow: 0 4px 12px #46315424;
+  /* 最多 3 行：超出直接裁掉。宁可少显示一行，也不能把气泡撑高。 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: speech-in 180ms ease both;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+/* 覆盖全局 button 的悬停配色（那一条的选择器权重与本行相同，靠位置取胜）。 */
+.pet-speech-body:hover:not(:disabled) { background: #ffffff; }
+.pet-speech-body:focus-visible { outline: 2px solid #b19bc3; outline-offset: 2px; }
+.pet-speech.leaving .pet-speech-body { opacity: 0; transform: translateY(-4px); }
+@keyframes speech-in { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pet-speech-body { animation: none; transition: none; }
+}

@@ -7,7 +7,7 @@ import { PROVIDERS, isCustomProvider } from './composables/aiConfig.js'
 import { onExpressionObserved, reloadPetModel, requestExpression } from './api/pet.js'
 
 const shared = usePetSettings()
-const { ready, settings, settingsBusy, error, setMaxFps, setAlwaysOnTop } = shared
+const { ready, settings, settingsBusy, error, setMaxFps, setAlwaysOnTop, setProactiveEnabled } = shared
 // AI 一节：与对话窗口共享同一份 Rust 状态，谁改了另一边都会收到 ai-config-changed。
 const {
   ready: aiReady, config: aiConfig, busy: aiBusy, testing: aiTesting, error: aiError,
@@ -82,6 +82,10 @@ async function removeKey() {
       <div class="setting-row">
         <div><label id="pin-label" for="pet-pin">保持置顶</label><p>让八千代留在其他窗口上方</p></div>
         <button id="pet-pin" class="toggle" role="switch" :aria-checked="settings?.alwaysOnTop ?? false" aria-labelledby="pin-label" :disabled="!ready || settingsBusy" @click="setAlwaysOnTop(!settings?.alwaysOnTop)"><span /></button>
+      </div>
+      <div class="setting-row">
+        <div><label id="proactive-label" for="pet-proactive">主动互动</label><p>八千代会自己冒一句话。只看前台程序的<b>名字</b>，标题只对已知编辑器取文件名；聊天软件和浏览器里在做什么一概不看</p></div>
+        <button id="pet-proactive" class="toggle" role="switch" :aria-checked="settings?.proactiveEnabled ?? true" aria-labelledby="proactive-label" :disabled="!ready || settingsBusy" @click="setProactiveEnabled(!settings?.proactiveEnabled)"><span /></button>
       </div>
     </section>
     <p class="settings-note"><Pin :size="13" aria-hidden="true" />设置即时生效，也可从托盘找回八千代。</p>

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port 1420 --strictPort",
     "build": "vite build",
-    "test": "node --test src/live2d/*.test.js src/composables/petMenu.test.js src/composables/petSettings.test.js src/composables/aiConfig.test.js src/composables/chatMessages.test.js src/composables/deltaBatch.test.js src/interactions/*.test.js",
+    "test": "node --test src/live2d/*.test.js src/composables/petMenu.test.js src/composables/petSettings.test.js src/composables/aiConfig.test.js src/composables/chatMessages.test.js src/composables/deltaBatch.test.js src/composables/speechBubble.test.js src/interactions/*.test.js",
     "tauri": "tauri"
   },
   "dependencies": {
