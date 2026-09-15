@@ -4871,6 +4871,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-fs",
  "tokio-util",
+ "windows",
 ]
 
 [[package]]

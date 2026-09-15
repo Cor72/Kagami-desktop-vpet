@@ -6,10 +6,12 @@ use crate::{
     },
     broadcast, chat, chat_store, chat_window, clock, desktop,
     expression::validate_expression,
+    proactive,
     settings::{PetSettings, SettingsChange},
     settings_window,
 };
 use serde::Serialize;
+use tauri::Manager;
 
 // Serialize 让 Tauri 可以把这个 Rust 结构体转换成事件中的 JSON 对象。
 #[derive(Clone, Serialize)]
@@ -191,4 +193,61 @@ pub fn cancel_stream(app: tauri::AppHandle, session_id: String) -> Result<Cancel
     Ok(CancelResult {
         ok: chat::cancel(&app, &session_id),
     })
+}
+
+// ---------- 主动互动 ----------
+
+/// 前端的主动互动快照。开关本身存在 `settings.json` 的 `proactive.enabled` 里，
+/// 所以它跟着 `pet-settings-changed` 一起走。
+#[derive(Clone, Serialize)]
+pub struct ProactiveStateView {
+    pub enabled: bool,
+}
+
+#[tauri::command]
+pub fn get_proactive_state(app: tauri::AppHandle) -> Result<ProactiveStateView, String> {
+    Ok(ProactiveStateView {
+        enabled: desktop::get_settings(&app)?.proactive_enabled,
+    })
+}
+
+/// 一键开关。走 `desktop::update_settings`，于是落盘、广播、托盘三件事都有。
+///
+/// 返回的是**完整的设置快照**（比 `{ enabled }` 多几项）：前端的设置页拿它直接更新界面，
+/// 不必再回读一次，也就不会出现「点了开关、界面慢半拍」。
+#[tauri::command]
+pub fn set_proactive_enabled(app: tauri::AppHandle, enabled: bool) -> Result<PetSettings, String> {
+    desktop::update_settings(&app, SettingsChange::ProactiveEnabled(enabled))
+}
+
+/// 气泡消失时回报一句：`acknowledged` = 用户点了它。
+///
+/// 没点就算「被忽略」一次，连续三次之后同类冷却翻倍（计划 §8.4）。
+/// 回报的编号对不上当前那句时返回 `ok: false`——重复回报不该重复计数。
+#[tauri::command]
+pub fn proactive_dismiss(
+    app: tauri::AppHandle,
+    id: String,
+    acknowledged: bool,
+) -> Result<CancelResult, String> {
+    let store = app.state::<proactive::ProactiveStore>();
+    let mut state = store.0.lock().map_err(|error| error.to_string())?;
+    let ok = proactive::dismiss(&mut state, &id, acknowledged);
+    drop(state);
+
+    #[cfg(debug_assertions)]
+    println!(
+        "[Rust] 主动互动：气泡回报（{id}，{}）→ {}",
+        if acknowledged {
+            "被点掉"
+        } else {
+            "自己淡出"
+        },
+        if ok {
+            "已计入"
+        } else {
+            "不是当前那句，忽略"
+        }
+    );
+    Ok(CancelResult { ok })
 }

@@ -24,6 +24,8 @@ pub struct PetSettings {
     pub visible: bool,
     pub max_fps: u32,
     pub always_on_top: bool,
+    /// 主动互动总开关。关掉之后 Rust 侧连采样都不做（见 `proactive.rs`）。
+    pub proactive_enabled: bool,
 }
 
 impl Default for PetSettings {
@@ -33,6 +35,7 @@ impl Default for PetSettings {
             visible: true,
             max_fps: 30,
             always_on_top: true,
+            proactive_enabled: true,
         }
     }
 }
@@ -51,6 +54,23 @@ impl Default for PetSettings {
 pub struct StoredSettings {
     pub max_fps: u32,
     pub always_on_top: bool,
+    pub proactive: StoredProactive,
+}
+
+/// 主动互动的持久化部分。做成一个小结构体，以后加「静默时段」之类的配置
+/// 只要往这里添字段，不用再动 `StoredSettings` 的形状。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StoredProactive {
+    pub enabled: bool,
+}
+
+impl Default for StoredProactive {
+    fn default() -> Self {
+        Self {
+            enabled: PetSettings::default().proactive_enabled,
+        }
+    }
 }
 
 impl Default for StoredSettings {
@@ -59,6 +79,7 @@ impl Default for StoredSettings {
         Self {
             max_fps: defaults.max_fps,
             always_on_top: defaults.always_on_top,
+            proactive: StoredProactive::default(),
         }
     }
 }
@@ -68,6 +89,7 @@ pub enum SettingsChange {
     Visible(bool),
     MaxFps(u32),
     AlwaysOnTop(bool),
+    ProactiveEnabled(bool),
 }
 
 impl PetSettings {
@@ -80,6 +102,7 @@ impl PetSettings {
         match change {
             SettingsChange::Visible(visible) => next.visible = visible,
             SettingsChange::AlwaysOnTop(enabled) => next.always_on_top = enabled,
+            SettingsChange::ProactiveEnabled(enabled) => next.proactive_enabled = enabled,
             SettingsChange::MaxFps(fps) => {
                 if !is_supported_fps(fps) {
                     return Err("帧率只能是 15 或 30".into());
@@ -105,6 +128,7 @@ impl PetSettings {
                 Self {
                     max_fps: fallback_fps,
                     always_on_top: stored.always_on_top,
+                    proactive_enabled: stored.proactive.enabled,
                     ..Self::default()
                 },
                 Some(format!(
@@ -117,6 +141,7 @@ impl PetSettings {
             Self {
                 max_fps: stored.max_fps,
                 always_on_top: stored.always_on_top,
+                proactive_enabled: stored.proactive.enabled,
                 ..Self::default()
             },
             None,
@@ -128,6 +153,9 @@ impl PetSettings {
         StoredSettings {
             max_fps: self.max_fps,
             always_on_top: self.always_on_top,
+            proactive: StoredProactive {
+                enabled: self.proactive_enabled,
+            },
         }
     }
 }
@@ -241,10 +269,54 @@ mod tests {
                 revision: 3,
                 visible: false,
                 max_fps: 15,
-                always_on_top: false
+                always_on_top: false,
+                proactive_enabled: true,
             }
         );
         assert_eq!(settings, result);
+    }
+
+    /// 主动互动的开关要和别的偏好一样跨重启保留，而且不跟着「显示/隐藏」写文件。
+    #[test]
+    fn proactive_switch_survives_a_restart_and_is_written_under_its_own_key() {
+        let dir = TempDir::new("proactive-restart");
+        let store = dir.store();
+
+        let mut settings = PetSettings::default();
+        settings
+            .update(SettingsChange::ProactiveEnabled(false), || Ok(()))
+            .unwrap();
+        // 隐藏只改会话状态，但也必须把主动互动的选择一起带走，不能覆盖掉。
+        settings
+            .update(SettingsChange::Visible(false), || Ok(()))
+            .unwrap();
+        save_to(&store, &settings).expect("写入设置");
+
+        let text = fs::read_to_string(store.path(SETTINGS_FILE)).expect("读取");
+        let json: serde_json::Value = serde_json::from_str(&text).expect("解析");
+        assert_eq!(json["data"]["proactive"]["enabled"], false, "{text}");
+
+        let (restored, note) = load_from(&store);
+        assert!(note.is_none(), "正常读取不应产生说明：{note:?}");
+        assert!(!restored.proactive_enabled, "重启后开关应保持关闭");
+    }
+
+    /// 老版本写出来的 `settings.json` 里没有 `proactive` 一节：默认必须是**开着**，
+    /// 否则升级上来的人会发现新功能「怎么没反应」。
+    #[test]
+    fn a_file_without_the_proactive_section_keeps_the_feature_on() {
+        let dir = TempDir::new("no-proactive-key");
+        let store = dir.store();
+        fs::write(
+            store.path(SETTINGS_FILE),
+            r#"{"schemaVersion": 1, "data": {"maxFps": 15, "alwaysOnTop": false}}"#,
+        )
+        .expect("写入旧版文件");
+
+        let (settings, note) = load_from(&store);
+        assert!(note.is_none(), "{note:?}");
+        assert!(settings.proactive_enabled, "默认开着");
+        assert_eq!(settings.max_fps, 15);
     }
 
     /// Phase 7 的核心验收：写下去的设置，下一次启动读到的是同一份值。

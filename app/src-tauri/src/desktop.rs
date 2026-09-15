@@ -52,7 +52,8 @@ pub fn update_settings(app: &AppHandle, change: SettingsChange) -> Result<PetSet
                 SettingsChange::Visible(true) => window.unminimize().and_then(|_| window.show()),
                 SettingsChange::Visible(false) => window.hide(),
                 SettingsChange::AlwaysOnTop(enabled) => window.set_always_on_top(enabled),
-                SettingsChange::MaxFps(_) => Ok(()),
+                // 帧率与主动互动都不需要动窗口，只改状态与落盘。
+                SettingsChange::MaxFps(_) | SettingsChange::ProactiveEnabled(_) => Ok(()),
             };
             result.map_err(|error| error.to_string())
         })?;
@@ -172,6 +173,8 @@ pub fn on_page_load(
         return;
     }
     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+        #[cfg(debug_assertions)]
+        println!("[Rust] 主窗口页面加载完成");
         flush_startup_notices(webview.app_handle());
     }
 }

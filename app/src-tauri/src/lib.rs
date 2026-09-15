@@ -7,8 +7,10 @@ mod chat_store;
 mod chat_window;
 mod clock;
 mod commands;
+mod context;
 mod desktop;
 mod expression;
+mod proactive;
 mod settings;
 mod settings_window;
 mod store;
@@ -28,6 +30,7 @@ pub fn run() {
         .manage(desktop::StartupNotices::default())
         .manage(ai::AiState::default())
         .manage(chat::ChatState::default())
+        .manage(proactive::ProactiveStore::default())
         .setup(|app| {
             if let Err(error) = tray::create(app.handle()) {
                 eprintln!("[Rust] 托盘创建失败，恢复普通窗口：{error}");
@@ -42,6 +45,9 @@ pub fn run() {
             desktop::restore_settings(app.handle());
             // AI 配置与设置同源：先恢复内存状态，命令表才能读到磁盘上的值。
             ai::restore(app.handle());
+            // 主动互动的低频采样循环。开关与可见性由它自己每一轮先看一遍，
+            // 所以关掉之后不采样、不判断、不发言。
+            proactive::start(app.handle());
             #[cfg(feature = "perf-audit")]
             audit::start(app.handle());
             Ok(())
@@ -70,6 +76,9 @@ pub fn run() {
             commands::get_messages,
             commands::send_message,
             commands::cancel_stream,
+            commands::get_proactive_state,
+            commands::set_proactive_enabled,
+            commands::proactive_dismiss,
         ])
         .run(tauri::generate_context!())
         .expect("启动八千代桌宠失败");
@@ -106,6 +115,10 @@ mod tests {
             (
                 "chat::ChatState",
                 std::any::TypeId::of::<crate::chat::ChatState>(),
+            ),
+            (
+                "proactive::ProactiveStore",
+                std::any::TypeId::of::<crate::proactive::ProactiveStore>(),
             ),
         ];
         for (index, (left_name, left)) in types.iter().enumerate() {
