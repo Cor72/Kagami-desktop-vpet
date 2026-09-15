@@ -3,7 +3,8 @@
 //! 分层的原因：`ai/*` 只管「配置、密钥、请求、解析」，`chat_store` 只管文件，
 //! 这里负责把它们串起来，并处理「中途被打断」「连不上」这些真实会发生的状态。
 //!
-//! 阶段 A 只有聊天模式；阶段 C 的 Agent 循环会在这里长出来（工具调用、写入确认）。
+//! 两条路：聊天模式走 [`pump`]（就是阶段 A 那条），Agent 模式走
+//! [`crate::ai::agent`] 的循环。**分岔点只有一处**——给不给工具。
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -15,10 +16,12 @@ use tauri::{AppHandle, Manager};
 use tokio_util::sync::CancellationToken;
 
 use crate::ai::config::AiConfig;
+use crate::ai::config::Mode;
 use crate::ai::provider::{self, ByteStream, ChatMessage, OpenAiCompatible};
 use crate::ai::stream::{self, SseDecoder};
-use crate::ai::{persona, secret};
+use crate::ai::{agent, persona, secret};
 use crate::chat_store::{self, Session};
+use crate::workspace::{self, WorkspaceEntry};
 use crate::{broadcast, chat_window, clock, desktop};
 
 // 事件名。前端在 `app/src/api/chat.js` 里也有一份，两边要一起改。
@@ -26,6 +29,12 @@ pub const EVENT_STARTED: &str = "chat-stream-started";
 pub const EVENT_DELTA: &str = "chat-stream-delta";
 pub const EVENT_FINISHED: &str = "chat-stream-finished";
 pub const EVENT_FAILED: &str = "chat-stream-failed";
+/// Agent 模式：开始执行一次工具调用。
+pub const EVENT_TOOL_CALL: &str = "chat-tool-call";
+/// Agent 模式：一次工具调用的结果。
+pub const EVENT_TOOL_RESULT: &str = "chat-tool-result";
+/// Agent 模式：等用户确认的写入（带红绿 diff）。
+pub const EVENT_WRITE_REQUEST: &str = "chat-write-request";
 
 /// 用户点「停止」时写进历史的原因。
 pub const CANCELLED_NOTE: &str = "已停止";
@@ -46,10 +55,10 @@ struct StreamStarted {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StreamDelta {
-    session_id: String,
-    message_id: String,
-    text: String,
+pub struct StreamDelta {
+    pub session_id: String,
+    pub message_id: String,
+    pub text: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -67,6 +76,43 @@ struct StreamFailed {
     error: String,
 }
 
+/// 一次工具调用开始。`label` 是卡片上那句「正在读取 xxx」（文案在 `ai/tools.rs`）。
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallEvent {
+    pub session_id: String,
+    pub message_id: String,
+    /// 和结果事件配对用。计划里的载荷没有它，但没有它就无法把两个同名调用对上。
+    pub call_id: String,
+    pub name: String,
+    pub label: String,
+    pub args: serde_json::Value,
+}
+
+/// 一次工具调用的结果。
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolResultEvent {
+    pub session_id: String,
+    pub message_id: String,
+    pub call_id: String,
+    pub name: String,
+    pub ok: bool,
+    pub summary: String,
+}
+
+/// 等确认的一次写入。`diff` 是 unified 格式的原文，前端按行前缀上色。
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteRequestEvent {
+    pub session_id: String,
+    pub message_id: String,
+    pub request_id: String,
+    pub path: String,
+    pub diff: String,
+    pub reason: String,
+}
+
 /// 一次流跑完的结果。
 enum Outcome {
     /// 正常说完。
@@ -77,7 +123,8 @@ enum Outcome {
     Failed(String),
 }
 
-fn emit(app: &AppHandle, event: &str, payload: &impl Serialize) {
+/// 发一个对话事件。对话窗口关掉之后就没人收，那属于正常状态，不是错误。
+pub fn emit_chat(app: &AppHandle, event: &str, payload: &impl Serialize) {
     // 对话窗口关掉之后就没人收事件了，那属于正常状态，不是错误。
     if let Err(error) = broadcast::emit_if_open(app, chat_window::CHAT_LABEL, event, payload) {
         eprintln!("[Rust] 对话事件 {event} 发送失败：{error}");
@@ -139,8 +186,15 @@ pub fn cancel_all(app: &AppHandle) {
 /// 组装发给模型的消息：系统提示词 + 历史。
 ///
 /// 空内容的消息（占位中的助手消息）与失败消息里没有任何文字的，一律不发。
-fn build_messages(config: &AiConfig, session: &Session) -> Vec<ChatMessage> {
-    let mut messages = vec![ChatMessage::system(persona::system_prompt(config.mode))];
+fn build_messages(
+    config: &AiConfig,
+    session: &Session,
+    entries: &[WorkspaceEntry],
+) -> Vec<ChatMessage> {
+    let mut messages = vec![ChatMessage::system(persona::system_prompt(
+        config.mode,
+        entries,
+    ))];
     for message in &session.messages {
         if message.content.trim().is_empty() {
             continue;
@@ -148,6 +202,7 @@ fn build_messages(config: &AiConfig, session: &Session) -> Vec<ChatMessage> {
         messages.push(ChatMessage {
             role: message.role.as_wire().to_string(),
             content: message.content.clone(),
+            ..Default::default()
         });
     }
     messages
@@ -196,7 +251,7 @@ pub async fn send(app: AppHandle, session_id: &str, text: &str) -> Result<String
     }
 
     // 助手消息已经占位，告诉前端「这条 id 开始出字了」。
-    emit(
+    emit_chat(
         &app,
         EVENT_STARTED,
         &StreamStarted {
@@ -205,8 +260,49 @@ pub async fn send(app: AppHandle, session_id: &str, text: &str) -> Result<String
         },
     );
 
-    let messages = build_messages(&config, &session);
-    let stream = match provider::open_stream(&client, &config.model, &messages).await {
+    // 系统提示词要拼上当前的工作区条目清单（计划 §8.6）。
+    let entries = workspace::get(&app)?;
+    let messages = build_messages(&config, &session, &entries);
+
+    // ---------- Agent 模式：交给 Agent 循环（带工具，可能要好几轮）----------
+    if config.mode == Mode::Agent {
+        let app_for_task = app.clone();
+        let session_id_for_task = session_id.to_string();
+        let message_id = placeholder.id.clone();
+        tauri::async_runtime::spawn(async move {
+            let outcome = agent::run(
+                app_for_task.clone(),
+                session_id_for_task.clone(),
+                message_id.clone(),
+                config,
+                key,
+                messages,
+                token,
+            )
+            .await;
+            unregister(&app_for_task, &session_id_for_task);
+            // 被打断时把已经说过的话留下（与聊天模式一致），只是多一句「已停止」。
+            let (text, error) = if outcome.cancelled {
+                (outcome.text, Some(CANCELLED_NOTE.to_string()))
+            } else {
+                (outcome.text, outcome.error)
+            };
+            finalize(
+                &app_for_task,
+                &store,
+                session,
+                &session_id_for_task,
+                &message_id,
+                &text,
+                error,
+            );
+        });
+        return Ok(placeholder.id);
+    }
+
+    // ---------- 聊天模式：阶段 A 那条路，一个工具都不给 ----------
+    // 工具表是空的：聊天模式不给模型任何工具（设计文档 §3）。
+    let stream = match provider::open_stream(&client, &config.model, &messages, &[]).await {
         Ok(stream) => stream,
         Err(error) => {
             // 连不上：如实记进这条消息里，历史与界面都看得见。
@@ -279,7 +375,7 @@ fn finalize(
         );
     }
     match error {
-        Some(error) => emit(
+        Some(error) => emit_chat(
             app,
             EVENT_FAILED,
             &StreamFailed {
@@ -288,7 +384,7 @@ fn finalize(
                 error,
             },
         ),
-        None => emit(
+        None => emit_chat(
             app,
             EVENT_FINISHED,
             &StreamFinished {
@@ -362,7 +458,7 @@ fn absorb(
             continue;
         }
         text.push_str(&delta.content);
-        emit(
+        emit_chat(
             app,
             EVENT_DELTA,
             &StreamDelta {
@@ -412,23 +508,49 @@ mod tests {
             message(Role::Assistant, "在的"),
             message(Role::User, ""),
         ]);
-        let messages = build_messages(&config, &session);
+        let messages = build_messages(&config, &session, &[]);
         assert_eq!(messages.len(), 3, "空内容的消息不该发给模型");
         assert_eq!(messages[0].role, "system");
         assert_eq!(messages[1].content, "在吗");
         assert_eq!(messages[2].content, "在的");
     }
 
+    /// 阶段 C：Agent 模式的系统提示词要带上当前工作区清单，并说明工具的使用顺序。
     #[test]
-    fn agent_mode_tells_the_model_it_cannot_read_files_yet() {
+    fn agent_mode_carries_the_workspace_and_the_tool_rules() {
         let config = AiConfig {
             provider: Provider::Deepseek,
             mode: Mode::Agent,
             ..AiConfig::default()
         };
-        let messages = build_messages(&config, &session_with(Vec::new()));
+        let entries = vec![WorkspaceEntry {
+            id: "w1-1".into(),
+            kind: crate::workspace::EntryKind::Dir,
+            path: r"C:\proj".into(),
+            label: "proj".into(),
+        }];
+        let messages = build_messages(&config, &session_with(Vec::new()), &entries);
         assert!(messages[0].content.contains("Agent 模式"));
-        assert!(messages[0].content.contains("还没接上"));
+        assert!(messages[0].content.contains(r"C:\proj"), "要列出授权条目");
+        assert!(messages[0].content.contains("write_file"), "要说清能改文件");
+    }
+
+    /// 聊天模式仍然一个字都不提工作区：那条路不该出现文件相关的能力。
+    #[test]
+    fn chat_mode_never_mentions_the_workspace() {
+        let config = AiConfig {
+            mode: Mode::Chat,
+            ..AiConfig::default()
+        };
+        let entries = vec![WorkspaceEntry {
+            id: "w1-1".into(),
+            kind: crate::workspace::EntryKind::Dir,
+            path: r"C:\proj".into(),
+            label: "proj".into(),
+        }];
+        let messages = build_messages(&config, &session_with(Vec::new()), &entries);
+        assert!(!messages[0].content.contains(r"C:\proj"));
+        assert!(messages[0].content.contains("聊天模式"));
     }
 
     #[test]

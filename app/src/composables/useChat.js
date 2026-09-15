@@ -7,11 +7,13 @@
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
-  cancelStream, createSession, getMessages, listSessions,
-  onChatStreamDelta, onChatStreamFailed, onChatStreamFinished, onChatStreamStarted, sendMessage,
+  applyPendingWrite, cancelStream, createSession, getMessages, listSessions,
+  onChatStreamDelta, onChatStreamFailed, onChatStreamFinished, onChatStreamStarted,
+  onChatToolCall, onChatToolResult, onChatWriteRequest, rejectPendingWrite, sendMessage,
 } from '../api/chat.js'
 import {
-  appendUserMessage, applyDelta, ensureAssistantMessage, finishStream, removeMessage, storedToMessages,
+  appendUserMessage, applyDelta, attachWriteRequest, ensureAssistantMessage, expireWriteRequests,
+  finishStream, finishToolCall, removeMessage, resolveWriteRequest, startToolCall, storedToMessages,
 } from './chatMessages.js'
 import { createDeltaBatch } from './deltaBatch.js'
 
@@ -63,6 +65,8 @@ export function useChat() {
     if (disposed || !forThisSession(payload)) return
     flush()
     messages.value = finishStream(messages.value, payload.messageId)
+    // 流都结束了，还挂着的写入确认不可能再有回答（Agent 循环已经走了）。
+    messages.value = expireWriteRequests(messages.value, payload.messageId)
     if (streamingId.value === payload.messageId) streamingId.value = ''
   }
 
@@ -70,9 +74,41 @@ export function useChat() {
     if (disposed || !forThisSession(payload)) return
     flush()
     messages.value = finishStream(messages.value, payload.messageId, payload.error)
+    messages.value = expireWriteRequests(messages.value, payload.messageId)
     if (streamingId.value === payload.messageId) streamingId.value = ''
     // 气泡里也会写原因；这里再提示一次，免得用户只看到一条空消息。
     notice.value = payload.error
+  }
+
+  // ---------- Agent 模式的工具卡片 ----------
+  function onToolCall(payload) {
+    if (disposed || !forThisSession(payload)) return
+    messages.value = startToolCall(messages.value, payload.messageId, {
+      callId: payload.callId,
+      name: payload.name,
+      label: payload.label,
+      args: payload.args,
+    })
+  }
+
+  function onToolResult(payload) {
+    if (disposed || !forThisSession(payload)) return
+    messages.value = finishToolCall(messages.value, payload.messageId, {
+      callId: payload.callId,
+      name: payload.name,
+      ok: payload.ok,
+      summary: payload.summary,
+    })
+  }
+
+  function onWriteRequest(payload) {
+    if (disposed || !forThisSession(payload)) return
+    messages.value = attachWriteRequest(messages.value, payload.messageId, {
+      requestId: payload.requestId,
+      path: payload.path,
+      diff: payload.diff,
+      reason: payload.reason,
+    })
   }
 
   // ---------- 会话 ----------
@@ -93,6 +129,9 @@ export function useChat() {
         onChatStreamDelta(onDelta),
         onChatStreamFinished(onFinished),
         onChatStreamFailed(onFailed),
+        onChatToolCall(onToolCall),
+        onChatToolResult(onToolResult),
+        onChatWriteRequest(onWriteRequest),
       ])
       if (disposed) {
         stops.forEach(stop => stop())
@@ -169,7 +208,49 @@ export function useChat() {
     }
   }
 
+  /** 用户在确认卡片上点了「应用」：这才真的写（Rust 侧还会再校验一次路径）。 */
+  async function applyWrite(requestId) {
+    const messageId = messageIdOfWrite(requestId)
+    if (!messageId) return
+    try {
+      const outcome = await applyPendingWrite(requestId)
+      if (disposed) return
+      messages.value = resolveWriteRequest(messages.value, messageId, requestId, {
+        state: outcome.ok ? 'applied' : 'failed',
+        message: outcome.message,
+      })
+      if (!outcome.ok) notice.value = outcome.message
+    } catch (cause) {
+      if (!disposed) error.value = String(cause)
+    }
+  }
+
+  /** 用户点了「拒绝」：文件保持原样。 */
+  async function rejectWrite(requestId) {
+    const messageId = messageIdOfWrite(requestId)
+    if (!messageId) return
+    try {
+      const outcome = await rejectPendingWrite(requestId)
+      if (disposed) return
+      messages.value = resolveWriteRequest(messages.value, messageId, requestId, {
+        state: 'rejected',
+        message: outcome.message,
+      })
+    } catch (cause) {
+      if (!disposed) error.value = String(cause)
+    }
+  }
+
+  /** 这个 requestId 挂在哪条消息上。命令只认 requestId，界面要按 messageId 更新。 */
+  function messageIdOfWrite(requestId) {
+    const message = messages.value.find(item => item.writeRequest?.requestId === requestId)
+    return message?.id ?? ''
+  }
+
   const busy = computed(() => sending.value || Boolean(streamingId.value))
 
-  return { ready, busy, sending, streamingId, sessionId, messages, error, notice, send, stop, startNewSession }
+  return {
+    ready, busy, sending, streamingId, sessionId, messages, error, notice,
+    send, stop, startNewSession, applyWrite, rejectWrite,
+  }
 }

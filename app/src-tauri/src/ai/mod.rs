@@ -7,16 +7,22 @@
 //! | [`config`] | `ai.json` 的读写与校验（服务商 / 模型 / Base URL / 模式） |
 //! | [`secret`] | API Key 的存取（Windows 凭据管理器），只进内存，不进任何 json |
 //! | [`provider`] | 怎么发请求：`ChatProvider` trait + OpenAI 兼容实现 |
-//! | [`stream`] | 怎么把 SSE 分片拼回文本（纯函数，可单测） |
+//! | [`stream`] | 怎么把 SSE 分片拼回文本与工具调用（纯函数，可单测） |
+//! | [`tools`] | Agent 模式的工具表与执行（含输出预算） |
+//! | [`agent`] | Agent 循环：带工具的一轮，最多 8 轮 |
+//! | [`writes`] | 写入确认：diff → 等用户点「应用」→ 才写 |
 //! | [`persona`] | 系统提示词，待人设稿定稿后替换 |
 //!
 //! 「读配置 → 发请求 → 落盘 → 广播事件」的编排在 [`crate::chat`] 里。
 
+pub mod agent;
 pub mod config;
 pub mod persona;
 pub mod provider;
 pub mod secret;
 pub mod stream;
+pub mod tools;
+pub mod writes;
 
 use serde::Serialize;
 use std::sync::Mutex;

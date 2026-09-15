@@ -3,12 +3,14 @@ use crate::{
         self,
         config::{AiConfigPatch, AiConfigView, Provider},
         secret,
+        writes::{self, WriteOutcome},
     },
     broadcast, chat, chat_store, chat_window, clock, context, desktop,
     expression::validate_expression,
     proactive,
     settings::{PetSettings, SettingsChange},
     settings_window,
+    workspace::{self, EntryKind, WorkspaceEntry},
 };
 use serde::Serialize;
 use tauri::Manager;
@@ -193,6 +195,98 @@ pub fn cancel_stream(app: tauri::AppHandle, session_id: String) -> Result<Cancel
     Ok(CancelResult {
         ok: chat::cancel(&app, &session_id),
     })
+}
+
+// ---------- 工作区 ----------
+
+/// 当前的工作区条目。对话窗口打开时读一次，之后靠 `workspace-changed` 同步。
+#[tauri::command]
+pub fn list_workspace_entries(app: tauri::AppHandle) -> Result<Vec<WorkspaceEntry>, String> {
+    workspace::get(&app)
+}
+
+/// 「添加文件夹」：弹出系统目录选择器，选中的目录作为**可读写**条目。
+///
+/// 选择器在 Rust 侧调用（`tauri-plugin-dialog`），前端只发一个命令。这样前端
+/// 不需要任何 fs 或对话框权限——能力边界留在 Rust 这边（计划 §10 第 1 条）。
+#[tauri::command]
+pub async fn add_workspace_dir(app: tauri::AppHandle) -> Result<Vec<WorkspaceEntry>, String> {
+    let selected = {
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            use tauri_plugin_dialog::DialogExt;
+            app.dialog()
+                .file()
+                .set_title("选一个文件夹给八千代看（可以读写，改动前会给 diff）")
+                .blocking_pick_folder()
+        })
+        .await
+        .map_err(|error| format!("打开目录选择器失败：{error}"))?
+    };
+    let Some(folder) = selected else {
+        // 用户点了取消：不是错误，原样返回当前清单。
+        return workspace::get(&app);
+    };
+    let path = folder
+        .into_path()
+        .map_err(|error| format!("这个选择读不出路径：{error}"))?;
+    add_workspace_paths(&app, EntryKind::Dir, &[path.to_string_lossy().to_string()])
+}
+
+/// 拖拽投放：**一律作为只读文件条目**。
+///
+/// 拖进来的是引用而不是副本：原文件更新后读到的就是最新的（设计文档 §4.2）。
+/// 目录不从这里进来——那样会绕开「加文件夹」这个明确的授权动作。
+#[tauri::command]
+pub fn add_workspace_files(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+) -> Result<Vec<WorkspaceEntry>, String> {
+    if paths.is_empty() {
+        return Err("没有拖进来任何东西".into());
+    }
+    add_workspace_paths(&app, EntryKind::File, &paths)
+}
+
+/// 加条目：校验 → 写回内存 → 落盘 → 广播。
+fn add_workspace_paths(
+    app: &tauri::AppHandle,
+    kind: EntryKind,
+    paths: &[String],
+) -> Result<Vec<WorkspaceEntry>, String> {
+    let mut entries = workspace::get(app)?;
+    workspace::add(&mut entries, kind, paths, clock::now_ms())?;
+    workspace::replace(app, entries)
+}
+
+#[tauri::command]
+pub fn remove_workspace_entry(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Vec<WorkspaceEntry>, String> {
+    let mut entries = workspace::get(&app)?;
+    workspace::remove(&mut entries, &id)?;
+    workspace::replace(&app, entries)
+}
+
+// ---------- 写入确认 ----------
+
+/// 用户点了「应用」：**这时才真的写**（路径会在这里重新校验一遍）。
+#[tauri::command]
+pub fn apply_pending_write(
+    app: tauri::AppHandle,
+    request_id: String,
+) -> Result<WriteOutcome, String> {
+    writes::apply(&app, &request_id)
+}
+
+/// 用户点了「拒绝」：文件一个字都不动。
+#[tauri::command]
+pub fn reject_pending_write(
+    app: tauri::AppHandle,
+    request_id: String,
+) -> Result<WriteOutcome, String> {
+    writes::reject(&app, &request_id)
 }
 
 // ---------- 主动互动 ----------

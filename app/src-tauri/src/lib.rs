@@ -10,11 +10,13 @@ mod commands;
 mod context;
 mod desktop;
 mod expression;
+mod fs_tools;
 mod proactive;
 mod settings;
 mod settings_window;
 mod store;
 mod tray;
+mod workspace;
 
 use tauri::Manager;
 
@@ -22,6 +24,9 @@ pub fn run() {
     // 注册命令后，前端才可以通过 invoke 调用它。
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
+        // 目录选择器（「添加文件夹」）。前端拿不到任何对话框权限：
+        // 选择器是在 Rust 命令里调的，见 `commands::add_workspace_dir`。
+        .plugin(tauri_plugin_dialog::init())
         // 先用默认值占位，`setup` 里再换成磁盘上的值。
         // 这样命令表在注册之后立刻就能拿到状态，前端不存在「读不到状态」的窗口期。
         .manage(settings::PetState::default())
@@ -31,6 +36,8 @@ pub fn run() {
         .manage(ai::AiState::default())
         .manage(chat::ChatState::default())
         .manage(proactive::ProactiveStore::default())
+        .manage(workspace::WorkspaceState::default())
+        .manage(ai::writes::PendingWrites::default())
         .setup(|app| {
             if let Err(error) = tray::create(app.handle()) {
                 eprintln!("[Rust] 托盘创建失败，恢复普通窗口：{error}");
@@ -45,6 +52,8 @@ pub fn run() {
             desktop::restore_settings(app.handle());
             // AI 配置与设置同源：先恢复内存状态，命令表才能读到磁盘上的值。
             ai::restore(app.handle());
+            // 工作区条目同样先恢复：Agent 模式的系统提示词要用它。
+            workspace::restore(app.handle());
             // 主动互动的低频采样循环。开关与可见性由它自己每一轮先看一遍，
             // 所以关掉之后不采样、不判断、不发言。
             proactive::start(app.handle());
@@ -76,6 +85,12 @@ pub fn run() {
             commands::get_messages,
             commands::send_message,
             commands::cancel_stream,
+            commands::list_workspace_entries,
+            commands::add_workspace_dir,
+            commands::add_workspace_files,
+            commands::remove_workspace_entry,
+            commands::apply_pending_write,
+            commands::reject_pending_write,
             commands::get_proactive_state,
             commands::set_proactive_enabled,
             commands::set_browser_title_enabled,
@@ -122,6 +137,14 @@ mod tests {
             (
                 "proactive::ProactiveStore",
                 std::any::TypeId::of::<crate::proactive::ProactiveStore>(),
+            ),
+            (
+                "workspace::WorkspaceState",
+                std::any::TypeId::of::<crate::workspace::WorkspaceState>(),
+            ),
+            (
+                "ai::writes::PendingWrites",
+                std::any::TypeId::of::<crate::ai::writes::PendingWrites>(),
             ),
         ];
         for (index, (left_name, left)) in types.iter().enumerate() {

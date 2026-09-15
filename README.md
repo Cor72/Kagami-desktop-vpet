@@ -65,7 +65,58 @@ pnpm tauri dev
 - 没填 Key 时窗口不会假装能聊：顶部提示 + 「去设置里填 Key」按钮。
 - 窗口关掉再打开，历史还在（对话落盘见下一节）；窗口关闭时会中断正在进行的回答。
 
-> **Agent 模式**（读文件、写文件确认）尚未实现，属于实施计划的阶段 C。现在切过去只会改变系统提示词，模型会如实说它读不到文件。
+### Agent 模式（读文件、改文件）
+
+对话窗口顶部可以切「聊天 / Agent」。**模式只决定给模型哪些工具**；能碰哪些文件是另一回事，
+由工作区授权决定——开关无权放开权限。
+
+| | 聊天模式 | Agent 模式 |
+|---|---|---|
+| 给模型的工具 | **一个都不给** | 6 个（见下表） |
+| 能碰文件吗 | 不能 | 只能碰工作区里你显式给的那几样 |
+| 上下文里有什么 | 角色设定 + 对话历史 | 再加**工作区条目清单**（最多 32 条，一条一行） |
+
+**工作区条目分两种**，用同一套 `canonicalize` 白名单校验，靠类型字段区分权限：
+
+| | 目录条目 | 文件条目 |
+|---|---|---|
+| 怎么加进来 | 「添加文件夹」按钮（系统目录选择器） | **把文件拖进来** |
+| 权限 | 可读，写入要走 diff 确认 | **只读**——物理上没有写入通道，不存在例外 |
+| 心智模型 | 「这是我的项目」 | 「这是我给你的资料」 |
+
+拖进来的是**引用而不是副本**：原文件更新后读到的就是最新的。
+拖一个目录进来会被拒绝并提示改用「添加文件夹」——那条路才是明确的授权动作。
+
+工具集（一次给全）：
+
+| 工具 | 作用 | 硬上限 |
+|---|---|---|
+| `get_workspace_info` | 兜底：列出已授权条目 | 清单本来就在系统提示词里 |
+| `list_files` | 看目录结构，跳过 `node_modules` / `.git` / `target` 等 | 深度 ≤ 3，条数 ≤ 200 |
+| `grep` | 大小写不敏感的子串搜索（不是正则） | 命中 ≤ 50，单条 ≤ 200 字 |
+| `read_file` | 读文件正文，返回值带**最后修改时间** | 单文件 ≤ 64 KB，二进制拒读 |
+| `set_expression` | 换桌宠表情 | 复用现有表情白名单 |
+| `write_file` | **改文件，需确认** | 只能写目录条目里的路径 |
+
+几条写死的规矩：
+
+- **每次工具调用都重新 `canonicalize` 再比对白名单**，校验结果不缓存——符号链接可以在两次
+  调用之间被换掉，缓存等于把防线拆了。解析后的真实路径会重新过一遍白名单，指向工作区外的
+  软链接会被拒。
+- **单轮所有工具返回值合计不超过上下文的 25%**（估算值，落在 `ai/tools.rs` 的
+  `ROUND_OUTPUT_BUDGET_CHARS`），超出就截断并说明。逐个工具自己的上限才是主力。
+- **改文件必须过 diff 确认**：Rust 生成红绿 diff → 交给对话窗口 → 你点「应用」才写盘，
+  点「拒绝」一个字节都不动。写入是原子的（先写 `.tmp` 再改名）。没有 diff 的确认等于盲签。
+- Agent 循环**最多 8 轮**工具调用；点「停止」或关掉窗口都会立刻中断，磁盘上不会留下半截改动。
+- 系统提示词里写明用工具的顺序：先 `list_files` 看结构 → 再 `grep` 定位 → 最后才 `read_file`
+  读片段。模型默认行为是急着读整份文件。
+
+对话流里会看到两类卡片：工具卡片（「正在读取 pomodoro.rs」→「读过 pomodoro.rs 了」）与
+写入确认卡片（红绿 diff + 应用 / 拒绝）。文案按角色设定写，不是「正在执行 read_file 工具」。
+
+> **没有前端 fs 权限**：`capabilities/chat.json` 里依然没有任何文件系统权限，
+> 目录选择器也是在 Rust 命令里调的（`tauri-plugin-dialog`）。所有文件访问都走自定义命令，
+> 命令内每次校验。
 
 ### 主动互动（会自己说话）
 
@@ -202,12 +253,15 @@ app/
 │  │  ├─ PetStage.vue             Canvas 生命周期、手势、ResizeObserver
 │  │  ├─ PetBubbleMenu.vue        气泡菜单
 │  │  ├─ DevPanel.vue             仅开发模式的联调面板
-│  │  └─ chat/                    对话窗口的零件：消息流、气泡、输入区
+│  │  └─ chat/                    对话窗口的零件：消息流、气泡、输入区、
+│  │                              工作区栏、工具卡片、写入确认卡片（红绿 diff）
 │  ├─ composables/
 │  │  ├─ usePet.js                前端状态与事件订阅
 │  │  ├─ usePetSettings.js        设置快照（跨窗口共享）
 │  │  ├─ useAiConfig.js           AI 配置快照（设置窗口与对话窗口共享）
 │  │  ├─ useChat.js               会话、消息、流式增量（50ms 合批）
+│  │  ├─ useWorkspace.js          Agent 模式的工作区条目 + 拖拽投放
+│  │  ├─ workspace.js             工作区条目的纯逻辑（权限标签、拖拽路径过滤）
 │  │  ├─ chatMessages.js          消息列表的纯函数操作
 │  │  ├─ deltaBatch.js            delta 合批（纯函数，定时器可注入）
 │  │  ├─ aiConfig.js              服务商预设与快照版本比较
@@ -229,8 +283,13 @@ app/
       ├─ commands.rs              前端可调用的 Rust 入口
       ├─ desktop.rs               显示/隐藏/置顶、光标换算、错误上报
       ├─ ai/                      AI 配置、密钥、服务商、SSE 解析、人设提示词
+      │  ├─ agent.rs              Agent 循环（最多 8 轮）+ 工具调用分片拼接
+      │  ├─ tools.rs              工具表（JSON schema）+ 执行 + 单轮输出预算
+      │  └─ writes.rs             写入确认：diff + 原子写 + 等用户点「应用」
       ├─ chat.rs                  对话编排：发送、流式广播、取消、落盘收尾
       ├─ chat_store.rs            会话与消息落盘（sessions/<id>.json）
+      ├─ workspace.rs             工作区条目（目录 / 只读文件）+ 每次调用都重做的路径校验
+      ├─ fs_tools.rs              受限文件工具：list_files / read_file / grep
       ├─ expression.rs            表情白名单校验
       ├─ settings.rs              运行时设置（Mutex + revision）+ 读写 settings.json
       ├─ store.rs                 通用文件存储：原子写 + .bak + 损坏回退（只用 std，可直接单测）
@@ -278,6 +337,12 @@ app/
 | `get_messages` | `{ sessionId }` | `Message[]` |
 | `send_message` | `{ sessionId, text }` | `{ messageId }`（回答走事件陆续到达） |
 | `cancel_stream` | `{ sessionId }` | `{ ok }` |
+| `list_workspace_entries` | — | `WorkspaceEntry[]` |
+| `add_workspace_dir` | — | `WorkspaceEntry[]`（内部弹系统目录选择器） |
+| `add_workspace_files` | `{ paths }` | `WorkspaceEntry[]`（拖拽投放，一律只读） |
+| `remove_workspace_entry` | `{ id }` | `WorkspaceEntry[]` |
+| `apply_pending_write` | `{ requestId }` | `{ ok, message }`（**这时才写盘**） |
+| `reject_pending_write` | `{ requestId }` | `{ ok, message }`（什么都不写） |
 
 事件（Rust → Vue）：
 
@@ -294,6 +359,10 @@ app/
 | `chat-stream-delta` | `{ sessionId, messageId, text }`（前端按 50ms 合批） |
 | `chat-stream-finished` | `{ sessionId, messageId }` |
 | `chat-stream-failed` | `{ sessionId, messageId, error }` |
+| `chat-tool-call` | `{ sessionId, messageId, callId, name, label, args }` |
+| `chat-tool-result` | `{ sessionId, messageId, callId, name, ok, summary }` |
+| `chat-write-request` | `{ sessionId, messageId, requestId, path, diff, reason }` |
+| `workspace-changed` | `WorkspaceEntry[]` |
 
 设置快照带 `revision`，前端只接受不小于当前值的快照，避免初始化时用旧值覆盖新事件。
 
@@ -337,7 +406,10 @@ node scripts/summarize-performance.mjs ../docs/performance/my-run
 7. **`pnpm test` 的脚本是显式文件列表**，新增测试目录时要同步修改 `package.json`。
 8. **未完成的人工验收项**：托盘完整交互、手动拖动、系统关闭按钮转隐藏、跨不同缩放显示器的拖动（本机只有一个显示器）。另外 `settings.json` 的 `.bak` 回退路径目前只有单元测试覆盖——`.bak` 只在设置真正变更时才产生，需要点托盘或设置窗口才能触发，尚未用安装版端到端演练。
 9. **对话功能需要你自己的 API Key**：仓库里没有任何密钥，Key 只存在 Windows 凭据管理器里。「测试连接」会真的发一次最小请求（8 token），确认地址、Key、模型三者对得上。
-10. **Agent 模式只完成了壳**：模式切换会保存并影响系统提示词，但读文件 / 写文件确认（阶段 C）还没做，所以它现在不会、也不该假装能读文件。
+10. **Agent 模式已经能用，但边界要记住**：它只能碰你在工作区里显式给的那几样（最多 32 条），
+    文件条目永远只读；目录条目的写入每次都要你点「应用」。仍然没有的是：撤销（写下去就写下去了，
+    用 git 回滚）、逐块采纳、并发冲突检测。另外拖入一个目录会被拒绝——加目录请用「添加文件夹」，
+    那条路才会走写入确认。
 
 ## 相关文档
 

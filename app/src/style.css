@@ -409,6 +409,66 @@ body.chat-window, .chat-window #app { background: #f7f4f9; }
 .chat-guide .text-button { padding: 5px 9px; border-radius: 8px; background: #f1ebf5; }
 .chat-notice.error { background: #fbecef; color: #a33142; }
 
+/* ---------- Agent 模式的工作区栏 ----------
+   条目分两种：目录（可读写，改动前给 diff）与拖进来的文件（只读，画一把锁）。
+   只读是 Rust 侧的事实，这里的锁只是把它说出来。 */
+.workspace { margin: 0 16px 10px; padding: 10px 12px; border: 1px solid #e7dfed; border-radius: 11px; background: #fffdff; }
+.workspace.dragging { border-color: #b19bc3; background: #f7f2fb; }
+.workspace-head { display: flex; align-items: baseline; gap: 8px; }
+.workspace-title { font-size: 12px; font-weight: 600; color: #73558c; }
+.workspace-count { font-size: 10px; color: #a79cb0; }
+.workspace-list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.workspace-item { display: flex; align-items: center; gap: 7px; padding: 4px 5px; border-radius: 8px; background: #faf7fc; }
+.workspace-kind { display: grid; place-items: center; color: #8d7a9c; flex-shrink: 0; }
+.workspace-name { flex: 1; min-width: 0; font-size: 12px; color: #3d3545; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-access { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #6d5580; flex-shrink: 0; }
+.workspace-access.readonly { color: #a08a5c; }
+.workspace-remove { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 7px; background: transparent; color: #9b8fa6; flex-shrink: 0; }
+.workspace-remove:hover:not(:disabled) { background: #fbecef; color: #a33142; }
+.workspace-empty { margin: 8px 0 0; font-size: 11px; line-height: 1.6; color: #908498; }
+.workspace-drop { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.workspace-drop .text-button { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 8px; background: #f1ebf5; }
+.workspace-hint { font-size: 10px; color: #a79cb0; }
+.workspace.dragging .workspace-hint { color: #73558c; font-weight: 600; }
+.workspace-error { margin: 8px 0 0; font-size: 11px; line-height: 1.6; color: #a33142; }
+
+/* ---------- 工具调用卡片 ----------
+   文案来自 Rust（`ai/tools.rs`），按角色设定写成她说话的样子。 */
+.tool-row { display: flex; justify-content: flex-start; margin: -4px 0 8px 2px; }
+.tool-card { display: flex; align-items: center; gap: 6px; max-width: 78%; padding: 5px 10px; border: 1px dashed #ddd2e6; border-radius: 10px; background: #fbf8fd; color: #6d5580; font-size: 11px; }
+.tool-card.failed { border-color: #e6c9d1; background: #fbecef; color: #a33142; }
+.tool-icon { display: grid; place-items: center; flex-shrink: 0; }
+.tool-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-spin { animation: tool-spin 1.1s linear infinite; }
+@keyframes tool-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tool-spin { animation: none; } }
+
+/* ---------- 写入确认卡片（红绿 diff）----------
+   没有 diff 的确认等于盲签，所以这张卡片的信息主体就是 diff 本身。 */
+.write-row { display: flex; justify-content: flex-start; margin: 0 0 12px; }
+.write-card { width: 100%; max-width: 88%; border: 1px solid #e2d8ea; border-radius: 11px; background: #fffdff; overflow: hidden; }
+.write-card.state-applied { border-color: #bcd9c7; }
+.write-card.state-rejected, .write-card.state-expired { border-color: #e4dbe9; opacity: .92; }
+.write-card.state-failed { border-color: #e6c9d1; }
+.write-head { padding: 7px 11px; background: #faf7fc; border-bottom: 1px solid #f0e9f4; }
+.write-path { display: block; font-size: 11px; color: #5c4a6b; font-family: ui-monospace, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.write-reason { margin: 0; padding: 7px 11px 0; font-size: 11px; line-height: 1.6; color: #6d5580; }
+.write-diff { margin: 7px 0 0; max-height: 210px; overflow: auto; background: #fdfcfd; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.55; }
+.diff-line { display: block; padding: 0 11px; white-space: pre; }
+.diff-added { background: #e4f5e9; color: #226b40; }
+.diff-removed { background: #fbe6ea; color: #9c2b3c; }
+.diff-hunk { background: #f2ecf8; color: #6d5580; }
+.diff-file { background: #f7f3fa; color: #8d7a9c; }
+.diff-note, .diff-blank { color: #a79cb0; }
+.write-actions { display: flex; align-items: center; gap: 7px; padding: 9px 11px; border-top: 1px solid #f0e9f4; }
+.write-apply, .write-reject { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 8px; font-size: 12px; }
+.write-apply { background: #4b8a63; color: #fff; }
+.write-apply:hover:not(:disabled) { background: #417a57; }
+.write-reject { border: 1px solid #ded4e4; background: transparent; color: #65457d; }
+.write-reject:hover:not(:disabled) { background: #f1ebf5; }
+.write-state { font-size: 11px; color: #6d5580; }
+.write-card.state-failed .write-state { color: #a33142; }
+
 /* ---------- 设置窗口的 AI 一节 ---------- */
 .ai-card { margin-top: 14px; padding-bottom: 12px; }
 .settings-section-title { display: flex; align-items: center; gap: 6px; margin: 0; padding: 13px 0 11px; border-bottom: 1px solid #eee8f2; font-size: 12px; font-weight: 600; letter-spacing: .4px; color: #73558c; }

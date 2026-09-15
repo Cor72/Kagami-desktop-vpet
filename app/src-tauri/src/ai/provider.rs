@@ -24,10 +24,38 @@ pub const READ_TIMEOUT: Duration = Duration::from_secs(45);
 const ERROR_BODY_CHARS: usize = 240;
 
 /// 发给模型的一条消息（OpenAI 兼容线上格式）。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// 三个可选字段是工具调用需要的（阶段 C）：
+///
+/// - `tool_calls`：助手这一轮「要求调用的工具」；
+/// - `tool_call_id`：`role: "tool"` 的结果对应哪一次调用；
+/// - `content` 在带工具调用的助手消息里可以是空串。
+///
+/// 聊天模式下这两个字段始终是 `None`，序列化时会被跳过，请求体与阶段 A 完全一致。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCallWire>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// 线上格式里的一次工具调用。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolCallWire {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub function: FunctionCall,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FunctionCall {
+    pub name: String,
+    /// 参数的 JSON 原文。**不做二次序列化**：这一串是模型给的，原样发回去。
+    pub arguments: String,
 }
 
 impl ChatMessage {
@@ -35,6 +63,7 @@ impl ChatMessage {
         Self {
             role: "system".into(),
             content: content.into(),
+            ..Default::default()
         }
     }
 
@@ -42,6 +71,27 @@ impl ChatMessage {
         Self {
             role: "user".into(),
             content: content.into(),
+            ..Default::default()
+        }
+    }
+
+    /// 助手要求调用若干工具的那条消息。
+    pub fn assistant_tool_calls(content: impl Into<String>, calls: Vec<ToolCallWire>) -> Self {
+        Self {
+            role: "assistant".into(),
+            content: content.into(),
+            tool_calls: Some(calls),
+            tool_call_id: None,
+        }
+    }
+
+    /// 工具执行结果，回给模型。
+    pub fn tool_result(call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: "tool".into(),
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: Some(call_id.into()),
         }
     }
 }
@@ -53,7 +103,10 @@ pub trait ChatProvider: Send + Sync {
     /// `Authorization` 头的值。
     fn authorization(&self) -> String;
     /// 请求体。抽出来是为了能单测格式。
-    fn body(&self, model: &str, messages: &[ChatMessage]) -> Value;
+    ///
+    /// `tools` 为空数组时不带 `tools` 字段：聊天模式请求体与阶段 A 逐字节相同，
+    /// 不给不支持的兼容服务商添麻烦。
+    fn body(&self, model: &str, messages: &[ChatMessage], tools: &[Value]) -> Value;
 }
 
 /// OpenAI 兼容实现（DeepSeek 与 OpenAI 官方接口都是这个形状）。
@@ -87,12 +140,17 @@ impl ChatProvider for OpenAiCompatible {
         format!("Bearer {}", self.api_key)
     }
 
-    fn body(&self, model: &str, messages: &[ChatMessage]) -> Value {
-        json!({
+    fn body(&self, model: &str, messages: &[ChatMessage], tools: &[Value]) -> Value {
+        let mut body = json!({
             "model": model,
             "messages": messages,
             "stream": true,
-        })
+        });
+        if !tools.is_empty() {
+            body["tools"] = json!(tools);
+            body["tool_choice"] = json!("auto");
+        }
+        body
     }
 }
 
@@ -118,12 +176,13 @@ pub async fn open_stream(
     provider: &dyn ChatProvider,
     model: &str,
     messages: &[ChatMessage],
+    tools: &[Value],
 ) -> Result<ByteStream, String> {
     let response = client()?
         .post(provider.endpoint())
         .header(reqwest::header::AUTHORIZATION, provider.authorization())
         .header(reqwest::header::ACCEPT, "text/event-stream")
-        .json(&provider.body(model, messages))
+        .json(&provider.body(model, messages, tools))
         .send()
         .await
         .map_err(describe_transport_error)?;
@@ -144,7 +203,7 @@ pub async fn open_stream(
 ///
 /// 用真的请求而不是只检查 Key 格式：用户点这个按钮就是想知道「到底通不通」。
 pub async fn ping(provider: &dyn ChatProvider, model: &str) -> Result<String, String> {
-    let mut body = provider.body(model, &[ChatMessage::user("你好")]);
+    let mut body = provider.body(model, &[ChatMessage::user("你好")], &[]);
     body["stream"] = json!(false);
     body["max_tokens"] = json!(8);
 
@@ -245,11 +304,65 @@ mod tests {
     #[test]
     fn body_is_openai_compatible_and_streaming() {
         let messages = vec![ChatMessage::system("你是八千代"), ChatMessage::user("在吗")];
-        let body = provider().body("deepseek-chat", &messages);
+        let body = provider().body("deepseek-chat", &messages, &[]);
         assert_eq!(body["model"], "deepseek-chat");
         assert_eq!(body["stream"], true);
         assert_eq!(body["messages"][0]["role"], "system");
         assert_eq!(body["messages"][1]["content"], "在吗");
+    }
+
+    /// 聊天模式（工具为空）的请求体里不该多出 `tools` / `tool_choice`：
+    /// 有些兼容服务商看到不认识的字段会直接报错。
+    #[test]
+    fn a_request_without_tools_does_not_mention_them() {
+        let body = provider().body("deepseek-chat", &[ChatMessage::user("在吗")], &[]);
+        assert!(body.get("tools").is_none(), "{body}");
+        assert!(body.get("tool_choice").is_none(), "{body}");
+    }
+
+    #[test]
+    fn agent_requests_carry_the_tool_table() {
+        let tools = vec![json!({
+            "type": "function",
+            "function": {"name": "read_file", "description": "读文件", "parameters": {"type": "object"}}
+        })];
+        let body = provider().body("deepseek-chat", &[ChatMessage::user("看看")], &tools);
+        assert_eq!(body["tool_choice"], "auto");
+        assert_eq!(body["tools"][0]["function"]["name"], "read_file");
+    }
+
+    /// 带工具调用的助手消息与工具结果消息的线上形状。
+    #[test]
+    fn tool_turns_serialize_the_way_the_wire_expects() {
+        let assistant = ChatMessage::assistant_tool_calls(
+            "",
+            vec![ToolCallWire {
+                id: "call_1".into(),
+                kind: "function".into(),
+                function: FunctionCall {
+                    name: "read_file".into(),
+                    arguments: "{\"path\":\"a.rs\"}".into(),
+                },
+            }],
+        );
+        let value = serde_json::to_value(&assistant).expect("序列化");
+        assert_eq!(value["role"], "assistant");
+        assert_eq!(value["content"], "");
+        assert_eq!(value["tool_calls"][0]["type"], "function");
+        assert_eq!(
+            value["tool_calls"][0]["function"]["arguments"],
+            "{\"path\":\"a.rs\"}"
+        );
+        assert!(
+            value.get("tool_call_id").is_none(),
+            "没有的字段不该出现：{value}"
+        );
+
+        let result = ChatMessage::tool_result("call_1", "读到 3 行");
+        let value = serde_json::to_value(&result).expect("序列化");
+        assert_eq!(value["role"], "tool");
+        assert_eq!(value["tool_call_id"], "call_1");
+        assert!(value.get("tool_calls").is_none(), "{value}");
     }
 
     #[test]
@@ -394,6 +507,7 @@ mod tests {
             &provider,
             "test-model",
             &[ChatMessage::user("在吗")],
+            &[],
         ))
         .expect("打开流");
         assert_eq!(collect(stream), "你好呀");
@@ -412,6 +526,7 @@ mod tests {
             &provider,
             "test-model",
             &[ChatMessage::user("在吗")],
+            &[],
         ))
         .err()
         .expect("401 应当失败");

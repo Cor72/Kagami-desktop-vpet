@@ -94,6 +94,24 @@ pub struct Delta {
     pub content: String,
     /// 模型说完了的原因（`stop` / `length` …）。
     pub finish_reason: Option<String>,
+    /// 本次增量里的工具调用分片（阶段 C）。聊天模式下永远是空的。
+    pub tool_calls: Vec<ToolCallDelta>,
+}
+
+/// 工具调用的一次分片。
+///
+/// 线上格式把它切碎了发：第一片带 `id` 与 `function.name`，后面几片只带
+/// `function.arguments` 的一段字符串。**按 `index` 拼接**，不能按到达顺序拼——
+/// 同一个回答里可以同时有多个工具调用。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ToolCallDelta {
+    pub index: u64,
+    /// 只有第一片有。
+    pub id: Option<String>,
+    /// 只有第一片有。
+    pub name: Option<String>,
+    /// 参数 JSON 的一段。
+    pub arguments: String,
 }
 
 /// 解析一条 `data:` 载荷。`[DONE]` 要由调用方先判断并跳过。
@@ -125,10 +143,47 @@ pub fn parse_delta(payload: &str) -> Result<Option<Delta>, String> {
         .and_then(|reason| reason.as_str())
         .map(|reason| reason.to_string());
 
+    let tool_calls = choice
+        .get("delta")
+        .and_then(|delta| delta.get("tool_calls"))
+        .and_then(|calls| calls.as_array())
+        .map(|calls| calls.iter().filter_map(parse_tool_call).collect())
+        .unwrap_or_default();
+
     Ok(Some(Delta {
         content,
         finish_reason,
+        tool_calls,
     }))
+}
+
+/// 解析一片工具调用。整条都不是对象时丢掉而不是报错：这一帧可能是别的东西。
+fn parse_tool_call(value: &serde_json::Value) -> Option<ToolCallDelta> {
+    if !value.is_object() {
+        return None;
+    }
+    let function = value.get("function");
+    Some(ToolCallDelta {
+        index: value
+            .get("index")
+            .and_then(|index| index.as_u64())
+            .unwrap_or(0),
+        id: value
+            .get("id")
+            .and_then(|id| id.as_str())
+            .filter(|id| !id.is_empty())
+            .map(|id| id.to_string()),
+        name: function
+            .and_then(|function| function.get("name"))
+            .and_then(|name| name.as_str())
+            .filter(|name| !name.is_empty())
+            .map(|name| name.to_string()),
+        arguments: function
+            .and_then(|function| function.get("arguments"))
+            .and_then(|arguments| arguments.as_str())
+            .unwrap_or_default()
+            .to_string(),
+    })
 }
 
 /// 从 `{"error": {...}}` 里取出给人看的原因。
@@ -248,5 +303,51 @@ mod tests {
         let error = parse_delta("{\"error\":{\"message\":\"Insufficient Balance\",\"code\":402}}")
             .expect_err("错误帧应当失败");
         assert_eq!(error, "Insufficient Balance");
+    }
+
+    #[test]
+    fn tool_call_fragments_are_parsed_with_their_index() {
+        // 第一片：带 id 与函数名，参数只有一半。
+        let first = parse_delta(
+            "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"pa\"}}]}}]}",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(first.content, "");
+        assert_eq!(first.tool_calls.len(), 1);
+        assert_eq!(first.tool_calls[0].index, 0);
+        assert_eq!(first.tool_calls[0].id.as_deref(), Some("call_1"));
+        assert_eq!(first.tool_calls[0].name.as_deref(), Some("read_file"));
+        assert_eq!(first.tool_calls[0].arguments, "{\"pa");
+
+        // 后续片：只有参数字符串。
+        let second = parse_delta(
+            "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"th\\\":\\\"a.rs\\\"}\"}}]}}]}",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(second.tool_calls[0].id.is_none());
+        assert_eq!(second.tool_calls[0].arguments, "th\":\"a.rs\"}");
+    }
+
+    #[test]
+    fn a_delta_can_carry_several_tool_calls_and_still_parses_content() {
+        let delta = parse_delta(
+            "{\"choices\":[{\"delta\":{\"content\":\"我看看\",\"tool_calls\":[{\"index\":0,\"id\":\"a\"},{\"index\":1,\"id\":\"b\"}]},\"finish_reason\":\"tool_calls\"}]}",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(delta.content, "我看看");
+        assert_eq!(delta.finish_reason.as_deref(), Some("tool_calls"));
+        assert_eq!(delta.tool_calls.len(), 2);
+        assert_eq!(delta.tool_calls[1].index, 1);
+    }
+
+    #[test]
+    fn frames_without_tool_calls_leave_the_field_empty() {
+        let delta = parse_delta("{\"choices\":[{\"delta\":{\"content\":\"好\"}}]}")
+            .unwrap()
+            .unwrap();
+        assert!(delta.tool_calls.is_empty());
     }
 }
