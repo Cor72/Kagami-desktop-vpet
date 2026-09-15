@@ -289,7 +289,14 @@ pub fn extract_file_name_from_title(title: &str) -> Option<String> {
     if head.is_empty() || head.contains(['\\', '/', '\u{0}']) {
         return None;
     }
-    Some(head.chars().take(DETAIL_MAX_CHARS).collect())
+    // 太长就截断，并且**补一个省略号**：不加的话气泡里会出现
+    // 「编辑器打开了：2026-09-14-agent-mode-an」这种看起来像坏掉的字符串。
+    if head.chars().count() <= DETAIL_MAX_CHARS {
+        return Some(head.to_string());
+    }
+    let mut short: String = head.chars().take(DETAIL_MAX_CHARS).collect();
+    short.push('…');
+    Some(short)
 }
 
 // ---------- 规则引擎 ----------
@@ -1253,10 +1260,16 @@ mod tests {
             extract_file_name_from_title("main.rs – 我的项目 – IntelliJ IDEA"),
             Some("main.rs".into())
         );
-        // 太长的文件名会被截断，免得撑爆气泡。
+        // 太长的文件名会被截断并补省略号，免得撑爆气泡、也免得看起来像坏字符串。
         assert_eq!(
             extract_file_name_from_title(&format!("{}.rs - 项目 - Code", "a".repeat(40))),
-            Some("a".repeat(DETAIL_MAX_CHARS))
+            Some(format!("{}…", "a".repeat(DETAIL_MAX_CHARS)))
+        );
+        // 刚好等于上限的不截断（`DETAIL_MAX_CHARS` 含扩展名）。
+        let exact = format!("{}.rs", "b".repeat(DETAIL_MAX_CHARS - 3));
+        assert_eq!(
+            extract_file_name_from_title(&format!("{exact} - 项目 - Code")),
+            Some(exact)
         );
         assert_eq!(
             extract_file_name_from_title("Visual Studio Code"),
