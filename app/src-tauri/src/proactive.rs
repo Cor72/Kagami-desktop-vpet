@@ -90,15 +90,73 @@ impl Category {
 /// 窗口标题怎么处理。**这是隐私分级的关键**（计划 §8.2）：
 ///
 /// - [`TitleUse::EditorFile`]：已知编辑器，只从标题里提取**文件名**；
-/// - [`TitleUse::Discard`]：其余应用（浏览器、聊天软件……）**整条丢弃**。
+/// - [`TitleUse::BrowserTitle`]：浏览器。先用白名单认站点，认得出才把页面标题当内容用；
+/// - [`TitleUse::Discard`]：其余应用（聊天软件……）**整条丢弃**。
 ///
-/// 于是知道你在玩什么游戏，但**不知道**你在跟谁聊天：
-/// 「招商银行 - Chrome」「张三 - 微信」这类标题一条都不会被用上。
+/// 于是知道你在玩什么游戏，也能对你在看的页面随口说两句，
+/// 但**认不出的浏览器页面照样整条丢弃**——「招商银行 - Chrome」「张三 - 微信」
+/// 这类标题一条都不会被用上。这条通道的入口就是 [`BROWSER_SITES`] 那张白名单，
+/// **加站点之前先想清楚这条通道该开多大**。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TitleUse {
     EditorFile,
+    BrowserTitle,
     Discard,
 }
+
+/// 一个浏览器站点：标题里出现这个站点名时，用哪一组文案。
+#[derive(Debug)]
+pub struct SiteRule {
+    /// 出现在浏览器标题里的站点名，例如 `哔哩哔哩`。比较时不区分大小写。
+    pub name: &'static str,
+    /// 这个站点专用的一组文案。含 `{detail}` 的会填进页面标题。
+    pub lines: &'static [&'static str],
+}
+
+/// 浏览器站点白名单。
+///
+/// 匹配范围**只限标题的最后两段**（`页面标题 - 站点名 - 浏览器名`）。
+/// 这条限制是有意的：它让「某某博客上有一篇讲 GitHub 的文章」匹配不上 GitHub，
+/// 因为页面标题不在最后两段里。**白名单之外，一个字都不往外传。**
+///
+/// 文案套路见 `docs/八千代角色设定.md`：**可以表达态度，不要下判断**。
+/// 「这个我熟」是态度，怎么用都不会错；「这个很好看」是判断，猜错了立刻出戏。
+pub const BROWSER_SITES: &[SiteRule] = &[
+    SiteRule {
+        name: "哔哩哔哩",
+        lines: &[
+            "《{detail}》，我记下了",
+            "哦，《{detail}》",
+            "{detail}……这个我熟",
+            "去哔哩哔哩了",
+        ],
+    },
+    SiteRule {
+        name: "bilibili",
+        lines: &[
+            "《{detail}》，我记下了",
+            "哦，《{detail}》",
+            "{detail}……这个我熟",
+            "去哔哩哔哩了",
+        ],
+    },
+    SiteRule {
+        name: "YouTube",
+        lines: &[
+            "《{detail}》，记下了",
+            "神明大人在看《{detail}》",
+            "去 YouTube 了",
+        ],
+    },
+    SiteRule {
+        name: "GitHub",
+        lines: &["《{detail}》，我去逛逛", "哦，是 {detail}", "去逛仓库了"],
+    },
+    SiteRule {
+        name: "知乎",
+        lines: &["《{detail}》，我记下了", "哦，《{detail}》", "去知乎了"],
+    },
+];
 
 /// 一条「进程名 → 文案」的规则。
 ///
@@ -169,19 +227,19 @@ pub const APP_RULES: &[AppRule] = &[
     AppRule {
         process: "chrome.exe",
         category: Category::Browser,
-        title: TitleUse::Discard,
+        title: TitleUse::BrowserTitle,
         lines: &["神明大人去网上看看", "又见浏览器", "浏览器打开了"],
     },
     AppRule {
         process: "msedge.exe",
         category: Category::Browser,
-        title: TitleUse::Discard,
+        title: TitleUse::BrowserTitle,
         lines: &["神明大人去网上看看", "又见浏览器", "浏览器打开了"],
     },
     AppRule {
         process: "firefox.exe",
         category: Category::Browser,
-        title: TitleUse::Discard,
+        title: TitleUse::BrowserTitle,
         lines: &["神明大人去网上看看", "又见浏览器", "浏览器打开了"],
     },
     AppRule {
@@ -250,10 +308,13 @@ impl From<Sample> for Signal {
     }
 }
 
-/// 归类结果：命中的规则，以及（只有编辑器才有）从标题里取出来的文件名。
+/// 归类结果：命中的规则，实际用的一组文案，以及从标题里取出来的内容。
 #[derive(Clone, Debug)]
 pub struct AppMatch {
     pub rule: &'static AppRule,
+    /// 实际用哪一组文案：一般是 `rule.lines`，浏览器命中站点时换成那个站点的话。
+    pub lines: &'static [&'static str],
+    /// 编辑器是文件名，浏览器是页面标题。取不到就是 `None`，退回不带内容的那几句。
     pub detail: Option<String>,
 }
 
@@ -266,16 +327,29 @@ impl AppMatch {
 /// 把一次采样归类。未登记的应用返回 `None`——**只记录，不说话**。
 pub fn classify(signal: &Signal) -> Option<AppMatch> {
     let rule = find_rule(signal.process_name.as_deref()?)?;
+    let mut lines = rule.lines;
     let detail = match rule.title {
         // 只有编辑器才看标题，而且只看第一段（文件名）。
         TitleUse::EditorFile => signal
             .window_title
             .as_deref()
             .and_then(extract_file_name_from_title),
+        // 浏览器：站点必须先命中白名单，否则一行标题都不看，直接用通用文案。
+        TitleUse::BrowserTitle => match signal.window_title.as_deref().and_then(browser_site_of) {
+            Some(site) => {
+                lines = site.lines;
+                signal.window_title.as_deref().and_then(extract_page_title)
+            }
+            None => None,
+        },
         // 其余应用：标题整条丢弃，连传都不往下传。
         TitleUse::Discard => None,
     };
-    Some(AppMatch { rule, detail })
+    Some(AppMatch {
+        rule,
+        lines,
+        detail,
+    })
 }
 
 fn find_rule(process_name: &str) -> Option<&'static AppRule> {
@@ -298,15 +372,62 @@ pub fn extract_file_name_from_title(title: &str) -> Option<String> {
         .filter_map(|separator| title.find(separator))
         .min()?;
     let head = title[..index].trim();
+    // 文件名里不该出现路径分隔符——出现了说明这一段不是文件名。
     if head.is_empty() || head.contains(['\\', '/', '\u{0}']) {
         return None;
     }
-    // 太长就截断，并且**补一个省略号**：不加的话气泡里会出现
-    // 「编辑器打开了：2026-09-14-agent-mode-an」这种看起来像坏掉的字符串。
-    if head.chars().count() <= DETAIL_MAX_CHARS {
-        return Some(head.to_string());
+    truncate_detail(head)
+}
+
+/// 从浏览器标题里认出白名单站点。
+///
+/// **只看标题的最后两段**（`页面标题 - 站点名 - 浏览器名`）。
+/// 这条限制是有意的：它让「某某博客上有一篇讲 GitHub 的文章」不会因为页面标题里
+/// 出现 GitHub 就被认成 GitHub——白名单之外，一个字都不往外传。
+fn browser_site_of(title: &str) -> Option<&'static SiteRule> {
+    let segments = title_segments(title);
+    let tail: Vec<&str> = segments.iter().rev().take(2).copied().collect();
+    BROWSER_SITES.iter().find(|site| {
+        let name = site.name.to_lowercase();
+        tail.iter()
+            .any(|segment| segment.to_lowercase().contains(&name))
+    })
+}
+
+/// 取浏览器标题的第一段当页面标题。
+///
+/// 只有一个分段时说明标题里没有「页面 - 站点」的结构，那就不当内容用——
+/// 宁可少说一句，也不要把整条标题念出来。
+fn extract_page_title(title: &str) -> Option<String> {
+    let segments = title_segments(title);
+    if segments.len() < 2 {
+        return None;
     }
-    let mut short: String = head.chars().take(DETAIL_MAX_CHARS).collect();
+    truncate_detail(segments[0])
+}
+
+/// 按破折号把标题拆段（三种破折号都算），去掉空段。
+fn title_segments(title: &str) -> Vec<&str> {
+    title
+        .split(['-', '–', '—'])
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+/// 限制长度；超出时保留开头并补省略号。
+///
+/// 不加省略号的话，气泡里会出现「编辑器打开了：2026-09-14-agent-mode-an」
+/// 这种看起来像坏掉的字符串。
+fn truncate_detail(text: &str) -> Option<String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    if text.chars().count() <= DETAIL_MAX_CHARS {
+        return Some(text.to_string());
+    }
+    let mut short: String = text.chars().take(DETAIL_MAX_CHARS).collect();
     short.push('…');
     Some(short)
 }
@@ -473,7 +594,7 @@ pub fn should_speak(signal: &Signal, state: &mut ProactiveState, now_ms: u64) ->
                 // 轮换按分类走：同一个分类下的几个程序（chrome / edge / firefox）
                 // 共用一组文案，才不会每换一个程序都从头念第一句。
                 rotation_key: app.rule.category.key().to_string(),
-                lines: app.rule.lines,
+                lines: app.lines,
                 detail: app.detail,
             };
             if let Some(utterance) = try_speak(state, set, signal, now_ms) {
@@ -1284,6 +1405,66 @@ mod tests {
             ..signal(None, 0)
         })
         .is_none());
+    }
+
+    #[test]
+    fn browser_titles_are_used_only_when_the_site_is_whitelisted() {
+        // 命中白名单：换成那个站点的话，并把页面标题当内容。
+        let bilibili = classify(&Signal {
+            process_name: Some("chrome.exe".into()),
+            window_title: Some("【中文】某视频 - 哔哩哔哩_bilibili - Google Chrome".into()),
+            ..signal(None, 0)
+        })
+        .expect("浏览器应该在表里");
+        assert_eq!(bilibili.detail.as_deref(), Some("【中文】某视频"));
+        assert!(
+            bilibili.lines.iter().any(|line| line.contains("哔哩哔哩")),
+            "应该换成哔哩哔哩那一组文案"
+        );
+
+        // 站点不在白名单：退回通用文案，标题一个字都不留。
+        let bank = classify(&Signal {
+            process_name: Some("chrome.exe".into()),
+            window_title: Some("招商银行 - 个人网上银行 - Google Chrome".into()),
+            ..signal(None, 0)
+        })
+        .expect("浏览器应该在表里");
+        assert_eq!(bank.detail, None, "白名单外的站点，标题一个字都不该用");
+        assert!(
+            bank.lines.iter().all(|line| !line.contains("{detail}")),
+            "通用浏览器文案不能带内容占位符，否则没有内容时会挑不出句子"
+        );
+    }
+
+    /// 隐私关键：站点白名单**只看标题的最后两段**。
+    ///
+    /// 否则「某某博客上有一篇讲 GitHub 的文章」会因为页面标题里出现 GitHub
+    /// 而被认成 GitHub，把页面标题送出去。
+    #[test]
+    fn a_site_name_inside_the_page_title_does_not_open_the_gate() {
+        let blog = classify(&Signal {
+            process_name: Some("chrome.exe".into()),
+            window_title: Some("GitHub 的十个技巧 - 某某博客 - Google Chrome".into()),
+            ..signal(None, 0)
+        })
+        .expect("浏览器应该在表里");
+        assert_eq!(blog.detail, None, "页面标题里出现站点名不算命中");
+    }
+
+    #[test]
+    fn page_title_comes_from_the_first_segment_and_is_truncated() {
+        assert_eq!(
+            extract_page_title("页面 - 哔哩哔哩 - Google Chrome").as_deref(),
+            Some("页面")
+        );
+        // 只有一段（没有站点信息）就不当内容用——宁可少说一句。
+        assert_eq!(extract_page_title("哔哩哔哩"), None);
+        assert_eq!(extract_page_title(""), None);
+        // 太长要截断并补省略号。
+        let long = format!("{} - 哔哩哔哩 - Google Chrome", "字".repeat(40));
+        let cut = extract_page_title(&long).expect("应该取得到");
+        assert!(cut.ends_with('…'));
+        assert_eq!(cut.chars().count(), DETAIL_MAX_CHARS + 1);
     }
 
     #[test]
