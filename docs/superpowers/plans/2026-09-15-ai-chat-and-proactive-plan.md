@@ -409,64 +409,97 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
 
 ---
 
-## 九、实现顺序（六个里程碑，一个 PR）
+## 九、实现顺序（三个阶段，一个 PR）
 
-每个里程碑结束时都必须：**能运行 + 有测试 + 用户能看到变化**。不要一次写完全部再跑。
+**M1 已完成**（见下）。剩下的活重组成三个阶段：
 
-### M1 对话窗口骨架
+**每阶段做完停一次，让用户亲手验证，然后直接进下一阶段。**
+不要把阶段内部再切成一堆小检查点——那样只会拖慢节奏。
 
-- 气泡菜单加第 6 个球 + 动作分发 + 测试
-- 新建 `chat_window.rs`，注册 `open_chat_window`
-- `main.js` 加 `?view=chat` 分流
-- `ChatWindow.vue` 只放空壳（顶栏 + 空消息区 + 输入框）
+### 已完成：M1 对话窗口骨架
 
-**验证**：右键桌宠 → 点「对话」→ 窗口打开；关掉再点能重新打开（单例不重复创建）。
+气泡菜单第 6 个球、独立单例对话窗口（720×560）、`?view=chat` 分流、`ChatWindow.vue` 空壳。
 
-### M2 API Key 与配置
+> **注意**：M1 交付时程序其实**启动即崩**——两个窗口的创建守卫都写成 `Mutex<()>` 的裸 type 别名，
+> 被 Tauri 当成同一个状态类型，`manage()` 第二次注册直接 panic。已修复并加了回归测试。
+> 教训见第十节第 12 条。
 
-- `ai/config.rs` + `ai/secret.rs` + 相关命令
-- 设置窗口加「AI」一节（含测试连接）
-- `ChatWindow.vue` 在没有 key 时显示引导提示
+---
 
-**验证**：在设置里填入 DeepSeek key → 保存 → 显示掩码 → 测试连接成功 → 重启应用后 key 仍在。
+### 阶段 A：能聊天
 
-### M3 聊天模式跑通（第一个可见成果）
+**做完用户就能用了：填 Key → 打开对话窗口 → 打一句话 → 回复逐字出现。**
 
-- `ai/provider.rs` + `ai/stream.rs`（SSE 解析）
-- `chat_store.rs`（会话与消息落盘）
-- `send_message` / `cancel_stream` + 六个流式事件
+**Rust**
+
+- `ai/config.rs`：`ai.json` 读写（provider / model / baseUrl / mode）
+- `ai/secret.rs`：keyring 封装（service = `yachiyo-desktop`）
+- `ai/provider.rs`：`ChatProvider` trait + OpenAI 兼容实现（DeepSeek 为默认预设）
+- `ai/stream.rs`：SSE 增量解析
+- `chat_store.rs`：会话与消息落盘到 `sessions/<id>.json`
+- 命令：`get_ai_config` / `set_ai_config` / `set_api_key` / `clear_api_key` /
+  `test_ai_connection` / `create_session` / `list_sessions` / `get_messages` /
+  `send_message` / `cancel_stream`
+- 事件：`chat-stream-started` / `-delta` / `-finished` / `-failed` / `ai-config-changed`
+
+**前端**
+
+- 设置窗口加「AI」一节：服务商下拉 + Key 输入 + 掩码显示 + 测试连接
+- `ChatWindow.vue` 接上真实消息流；没配 Key 时显示引导
 - `MessageList.vue` / `MessageBubble.vue` / `ChatComposer.vue`
+- `app/src/api/chat.js`：命令名与事件名集中在这里，组件里不出现裸字符串
+- **delta 事件按 50ms 节流**（硬要求，见第十节第 3 条）
 
-**验证**：打一句话 → 回复逐字出现 → 停止按钮能中断 → 关窗口重开历史还在。
-**这一步做完，最核心的东西就能用了。**
+**验证**：填 Key → 测试连接成功 → 打一句话 → 回复**逐字出现** → 停止能中断 →
+关窗口重开历史还在。
 
-### M4 Agent 模式：工作区 + 只读工具
+---
 
-- `workspace.rs`（条目注册 + `canonicalize` 白名单校验）
-- `fs_tools.rs`（`list_files` / `read_file` / `grep`）
-- `ai/tools.rs`（工具注册表）+ `ai/agent.rs`（循环，最多 8 轮）
-- `WorkspaceBar.vue`（添加文件夹 + 拖拽投放）
-- `ToolCallCard.vue`
+### 阶段 B：会主动说话
 
-**验证**：加一个文件夹 → 问「工作区里有什么」→ 看到工具调用卡片并得到正确回答；拖入一个文件 → 它能读到；试图读工作区外的文件 → 明确报错。
+**这一步不需要 API Key**——文案全是内置模板，不调模型。
 
-### M5 write_file + diff 确认
+**Rust**
 
-- `write_file` 工具 + `similar` 生成 diff
-- pending 状态（`Mutex<HashMap<String, PendingWrite>>`）
-- `chat-write-request` 事件 + `WriteConfirmCard.vue`
-- `apply_pending_write` / `reject_pending_write`
+- `context.rs`：用 `windows` crate 读前台窗口标题 / 前台进程名 / 空闲时长
+- `proactive.rs`：纯函数规则引擎 + 调度 + 内置文案表
+- 命令：`get_proactive_state` / `set_proactive_enabled` / `proactive_dismiss`
+- 事件：`proactive-speak`（发给**主窗口**，不是对话窗口）
 
-**验证**：让它改一个文件 → 出现红绿 diff → 点「拒绝」文件不变 → 再改一次点「应用」文件真的变了。
+**前端**
 
-### M6 主动互动
-
-- `context.rs`（三个系统 API）
-- `proactive.rs`（规则引擎 + 调度 + 文案表）
-- `PetSpeechBubble.vue` + `proactive-speak` 事件
+- `PetSpeechBubble.vue`：绝对定位、**不改窗口尺寸**、5 秒淡出、与气泡菜单互斥
 - 设置里加主动互动开关
 
-**验证**：闲置 5 分钟回来看到气泡；打开 VS Code 看到气泡；关掉开关后不再出现；隐藏桌宠时不再产生任何调用。
+**触发放三条**：空闲 ≥ 5 分钟、回到活跃、检测到某程序启动。
+
+**验证**：闲置 5 分钟回来看到气泡；打开编辑器 / 游戏看到气泡；关掉开关后不再出现；
+隐藏桌宠时不再产生任何调用。
+
+**这一步做完，用户最初提的两件事（对话 + 主动互动）就都齐了。**
+
+---
+
+### 阶段 C：Agent 能力
+
+**Rust**
+
+- `workspace.rs`：条目注册（目录 / 文件两类）+ `canonicalize` 白名单校验
+- `fs_tools.rs`：`list_files` / `read_file` / `grep`
+- `ai/tools.rs`：工具注册表 + JSON schema
+- `ai/agent.rs`：Agent 循环（最多 8 轮）+ 取消令牌
+- pending 写入状态 + `apply_pending_write` / `reject_pending_write`
+- `similar` 生成 diff
+
+**前端**
+
+- `WorkspaceBar.vue`：添加文件夹 + 拖拽投放 + 条目列表（只读的画一把锁）
+- `ToolCallCard.vue`：「正在读取 xxx」
+- `WriteConfirmCard.vue`：红绿 diff + 应用 / 拒绝
+
+**验证**：加一个文件夹 → 问「工作区里有什么」→ 看到工具调用卡片并得到正确回答；
+拖入一个文件能被读到；试图读工作区外 → 明确报错；
+让它改文件 → 出现红绿 diff → 点「拒绝」文件不变 → 点「应用」文件真的变了。
 
 ---
 
@@ -483,6 +516,12 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
 9. **测功能要用安装版**：直接跑 `target/release/yachiyo-desktop.exe` 会因模型资源没释放到旁边而报「找不到模型」。
 10. 新窗口要确认已加进 `capabilities`，否则 `invoke` 会被 Tauri 拒绝。
 11. git 全局配置里的代理（`127.0.0.1:7897`）平时没开，联网命令要用 `git -c http.proxy= -c https.proxy=` 绕过。
+12. **测试全过 ≠ 程序能启动。** M1 交付时 `cargo test`、`cargo build`、`pnpm build` 全部干净，
+    但程序**启动即 panic**，用户根本看不到窗口。原因是两个窗口的创建守卫都写成
+    `type X = Mutex<()>`——Rust 的 type 别名是透明的，两者是同一个类型，
+    Tauri 的 `manage()` 第二次注册就崩。**每个阶段做完，必须真的把程序跑起来一次**
+    （`pnpm.cmd tauri dev`），确认窗口出现、日志里有「启动时恢复设置」那一行，才算做完。
+    「点鼠标只有用户能做」不是不启动程序的理由。
 
 ---
 
@@ -490,7 +529,7 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
 
 - 本计划是 [Agent 模式与情境感知设计](../../specs/2026-09-14-agent-mode-and-context-design.md) 的落地。
 - 设计文档 §6.4 里的「番茄钟完成」「长时间刷非工作应用」两条触发**不在本计划范围**（前者依赖 Phase 8，后者最容易变成说教，建议最后做）。
-- 设计文档 §5.1 原本建议「第一版不做 `write_file`」。**本计划按用户要求改为一次做全**，但为此必须先实现 diff 确认卡片（M5）——没有它，写入确认等于盲签。
+- 设计文档 §5.1 原本建议「第一版不做 `write_file`」。**本计划按用户要求改为一次做全**，但为此必须先实现 diff 确认卡片（阶段 C）——没有它，写入确认等于盲签。
 - 若作者对任何一处设计提出异议，**先改设计文档再改代码**（这是作者定的规矩）。
 
 ---
@@ -498,7 +537,7 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
 ## 十二、交付方式
 
 - 分支：`feat/phase7-persistence` 上继续（Phase 7 底座留在同一个 PR）
-- 建议**一个里程碑一个提交**，提交信息用中文，格式可参考仓库既有历史
+- 建议**一个阶段一个提交**（阶段内部想拆细也可以），提交信息用中文，格式可参考仓库既有历史
 - PR 描述里要写清：这个 PR 包含 Phase 7 底座（原因：新功能依赖持久化）
 - 推送需要联网，本执行环境可能连不上 GitHub，**若失败就让用户在自己终端推**（Clash 打开着的时候）
 
