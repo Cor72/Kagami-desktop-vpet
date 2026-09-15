@@ -2,11 +2,18 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const SETTINGS_LABEL: &str = "settings";
-pub type SettingsWindowStore = Mutex<()>;
+
+/// 单例创建守卫。
+///
+/// 用 newtype 而不是 `type SettingsWindowStore = Mutex<()>;`：Rust 的 type 别名是透明的，
+/// 裸别名会和别的窗口守卫撞成同一个类型，导致 Tauri `manage()` 在启动时 panic。
+/// 完整说明见 `chat_window.rs` 里 `ChatWindowStore` 的注释。
+#[derive(Default)]
+pub struct SettingsWindowStore(pub Mutex<()>);
 
 fn open_sync(app: &AppHandle) -> Result<(), String> {
     let store = app.state::<SettingsWindowStore>();
-    let _creation_guard = store.lock().map_err(|error| error.to_string())?;
+    let _creation_guard = store.0.lock().map_err(|error| error.to_string())?;
 
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         window.unminimize().map_err(|error| error.to_string())?;
