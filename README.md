@@ -38,7 +38,7 @@ pnpm tauri dev
 
 菜单是**桌宠窗口内的一块普通 DOM**，竖直贴在画布右侧，**不改变窗口尺寸**。
 
-- 一级五项：表情 / 设置 / 置顶 / 隐藏 / 退出
+- 一级六项：表情 / 对话 / 设置 / 置顶 / 隐藏 / 退出
 - 二级五项：微笑 / 眯眼 / 泪眼 / 泪滴 / 返回
 - 按钮只有图标（52×52 圆形），文字通过**悬浮提示**显示，提示框用 CSS 自绘（原生 `title` 的边框无法调细）
 - 菜单与模型的距离由 `src/style.css` 的 `--menu-gap` 控制
@@ -54,12 +54,28 @@ pnpm tauri dev
 
 开发模式下窗口底部额外提供「开发联调」与「重新加载模型」两个按钮（发布版不含）。
 
+### 对话窗口（AI 聊天）
+
+从气泡菜单的「对话」打开，是与桌宠窗口分离的单例窗口（720×560，可缩放）。它**不加载 Live2D Core**，也不碰画布。
+
+- **服务商**：默认 DeepSeek（`https://api.deepseek.com/v1` + `deepseek-chat`），另预设 OpenAI 与「自定义」。三家都是 OpenAI 兼容格式。
+- **API Key 存在 Windows 凭据管理器**（service = `yachiyo-desktop`，account = 服务商名）。它**不写进任何 json、不进日志、不回传前端**；前端只能拿到 `hasKey` 与掩码（如 `sk-****1234`）。
+- **回复逐字出现**：请求带 `stream: true`，Rust 解析 SSE 增量后广播 `chat-stream-delta`；前端按 **50ms** 合批刷新 DOM，避免抢走 Live2D 的帧预算。
+- 发送前会真的探活一次最小请求（设置窗口的「测试连接」同一套逻辑）：401 / 402 / 404 / 429 都会被翻译成一句能照着改的中文。
+- 没填 Key 时窗口不会假装能聊：顶部提示 + 「去设置里填 Key」按钮。
+- 窗口关掉再打开，历史还在（对话落盘见下一节）；窗口关闭时会中断正在进行的回答。
+
+> **Agent 模式**（读文件、写文件确认）尚未实现，属于实施计划的阶段 C。现在切过去只会改变系统提示词，模型会如实说它读不到文件。
+
 ### 设置文件
 
 设置会落盘、重启后保留（v1 遗留的「重启恢复默认值」缺口已修掉）。文件在 Tauri 的应用数据目录：
 
 ```text
-%APPDATA%\com.yachiyo.desktop\settings.json
+%APPDATA%\com.yachiyo.desktop\
+├─ settings.json            桌宠设置
+├─ ai.json                  AI 配置（服务商 / 模型 / Base URL / 模式）
+└─ sessions\<sessionId>.json 对话历史（一个会话一个文件）
 ```
 
 ```json
@@ -77,6 +93,20 @@ pnpm tauri dev
 - 写入是原子的：先写 `settings.json.tmp`，把旧内容留一份 `settings.json.bak`，最后改名覆盖。
 - 读取顺序是主文件 → `.bak` → 默认值。**文件损坏不会让程序起不来**，而且会保留现场（不覆盖你改坏的那份），只上报原因。
 - 启动期（页面还没挂载）的提示会先排队，等主窗口加载完成再显示，避免那句话落到没人听的地方。
+
+`ai.json` 同样的写法与同样的容错（原子写、`.bak`、损坏回退、手工编辑后非法值会被拒绝并说明原因）。它**不含任何密钥**：
+
+```json
+{
+  "schemaVersion": 1,
+  "data": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "baseUrl": "https://api.deepseek.com/v1",
+    "mode": "chat"
+  }
+}
+```
 
 ### 托盘与常驻
 
@@ -115,18 +145,26 @@ app/
 ├─ public/live2d/                 浏览器版 Cubism Core
 ├─ scripts/                       性能测量与汇总脚本
 ├─ src/
-│  ├─ main.js                     按 ?view=settings 分流主窗口/设置窗口
+│  ├─ main.js                     按 ?view=settings / ?view=chat 分流三个窗口
 │  ├─ App.vue                     桌宠窗口布局、菜单状态、动作分发
-│  ├─ SettingsWindow.vue          设置页
+│  ├─ SettingsWindow.vue          设置页（含 AI 一节）
+│  ├─ ChatWindow.vue              对话窗口
 │  ├─ style.css                   全局样式与尺寸（窗口尺寸的唯一来源是同文件 .pet-anchor）
-│  ├─ api/pet.js                  集中封装 invoke / listen，组件不散落命令字符串
+│  ├─ api/pet.js                  桌宠命令与事件，组件不散落命令字符串
+│  ├─ api/chat.js                 AI 配置与对话的命令与事件
 │  ├─ components/
 │  │  ├─ PetStage.vue             Canvas 生命周期、手势、ResizeObserver
 │  │  ├─ PetBubbleMenu.vue        气泡菜单
-│  │  └─ DevPanel.vue             仅开发模式的联调面板
+│  │  ├─ DevPanel.vue             仅开发模式的联调面板
+│  │  └─ chat/                    对话窗口的零件：消息流、气泡、输入区
 │  ├─ composables/
 │  │  ├─ usePet.js                前端状态与事件订阅
 │  │  ├─ usePetSettings.js        设置快照（跨窗口共享）
+│  │  ├─ useAiConfig.js           AI 配置快照（设置窗口与对话窗口共享）
+│  │  ├─ useChat.js               会话、消息、流式增量（50ms 合批）
+│  │  ├─ chatMessages.js          消息列表的纯函数操作
+│  │  ├─ deltaBatch.js            delta 合批（纯函数，定时器可注入）
+│  │  ├─ aiConfig.js              服务商预设与快照版本比较
 │  │  ├─ petSettings.js           快照版本比较，防旧事件覆盖新值
 │  │  └─ petMenu.js               菜单结构与状态机（纯函数）
 │  ├─ interactions/petGesture.js  单击/拖动判定（纯函数）
@@ -144,6 +182,9 @@ app/
       ├─ lib.rs                   注册命令、状态、托盘
       ├─ commands.rs              前端可调用的 Rust 入口
       ├─ desktop.rs               显示/隐藏/置顶、光标换算、错误上报
+      ├─ ai/                      AI 配置、密钥、服务商、SSE 解析、人设提示词
+      ├─ chat.rs                  对话编排：发送、流式广播、取消、落盘收尾
+      ├─ chat_store.rs            会话与消息落盘（sessions/<id>.json）
       ├─ expression.rs            表情白名单校验
       ├─ settings.rs              运行时设置（Mutex + revision）+ 读写 settings.json
       ├─ store.rs                 通用文件存储：原子写 + .bak + 损坏回退（只用 std，可直接单测）
@@ -178,8 +219,19 @@ app/
 | `set_pet_max_fps` | `{ maxFps }` | 设置快照（只接受 15 / 30） |
 | `set_pet_always_on_top` | `{ enabled }` | 设置快照 |
 | `open_pet_settings` | — | — |
+| `open_chat_window` | — | — |
 | `reload_pet_model` | — | 仅开发版可用 |
 | `quit_pet` | — | — |
+| `get_ai_config` | — | `{ provider, model, baseUrl, mode, hasKey, keyMask }` |
+| `set_ai_config` | `{ patch }` | 同上（`patch` 只带要改的字段） |
+| `set_api_key` | `{ provider, key }` | 同上（**不回显 key**） |
+| `clear_api_key` | `{ provider }` | 同上 |
+| `test_ai_connection` | — | `{ ok, message }` |
+| `create_session` | — | `Session` |
+| `list_sessions` | — | `Session[]`（最近更新的在前） |
+| `get_messages` | `{ sessionId }` | `Message[]` |
+| `send_message` | `{ sessionId, text }` | `{ messageId }`（回答走事件陆续到达） |
+| `cancel_stream` | `{ sessionId }` | `{ ok }` |
 
 事件（Rust → Vue）：
 
@@ -191,6 +243,11 @@ app/
 | `pet-window-minimized` | `boolean` |
 | `pet-model-reload` | —（仅开发版） |
 | `pet-desktop-error` | 错误字符串 |
+| `ai-config-changed` | AI 配置快照（含 `revision`、`keyMask`，不含 key） |
+| `chat-stream-started` | `{ sessionId, messageId }` |
+| `chat-stream-delta` | `{ sessionId, messageId, text }`（前端按 50ms 合批） |
+| `chat-stream-finished` | `{ sessionId, messageId }` |
+| `chat-stream-failed` | `{ sessionId, messageId, error }` |
 
 设置快照带 `revision`，前端只接受不小于当前值的快照，避免初始化时用旧值覆盖新事件。
 
@@ -233,6 +290,8 @@ node scripts/summarize-performance.mjs ../docs/performance/my-run
 6. **依赖补丁不能丢**：`patches/easy-live2d@0.4.4.patch` 修复了上游库的加载错误传播、并行贴图失败时的清理时序、底层模型释放与动画时钟。请保留补丁文件、`pnpm-workspace.yaml` 与锁文件。
 7. **`pnpm test` 的脚本是显式文件列表**，新增测试目录时要同步修改 `package.json`。
 8. **未完成的人工验收项**：托盘完整交互、手动拖动、系统关闭按钮转隐藏、跨不同缩放显示器的拖动（本机只有一个显示器）。另外 `settings.json` 的 `.bak` 回退路径目前只有单元测试覆盖——`.bak` 只在设置真正变更时才产生，需要点托盘或设置窗口才能触发，尚未用安装版端到端演练。
+9. **对话功能需要你自己的 API Key**：仓库里没有任何密钥，Key 只存在 Windows 凭据管理器里。「测试连接」会真的发一次最小请求（8 token），确认地址、Key、模型三者对得上。
+10. **Agent 模式只完成了壳**：模式切换会保存并影响系统提示词，但读文件 / 写文件确认（阶段 C）还没做，所以它现在不会、也不该假装能读文件。
 
 ## 相关文档
 
