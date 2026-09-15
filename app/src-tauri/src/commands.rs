@@ -1,5 +1,5 @@
 use crate::{
-    broadcast, desktop,
+    broadcast, chat_window, desktop,
     expression::validate_expression,
     settings::{PetSettings, SettingsChange},
     settings_window,
@@ -68,6 +68,11 @@ pub fn request_expression(app: tauri::AppHandle, name: String) -> Result<(), Str
 #[tauri::command]
 pub async fn open_pet_settings(app: tauri::AppHandle) -> Result<(), String> {
     settings_window::open(app).await
+}
+
+#[tauri::command]
+pub async fn open_chat_window(app: tauri::AppHandle) -> Result<(), String> {
+    chat_window::open(app).await
 }
 
 #[tauri::command]

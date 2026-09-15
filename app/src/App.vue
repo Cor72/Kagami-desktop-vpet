@@ -5,6 +5,7 @@ import PetBubbleMenu from './components/PetBubbleMenu.vue'
 import { usePet } from './composables/usePet.js'
 import { getMenuItems, pickExpression, transitionMenu } from './composables/petMenu.js'
 import { openPetSettings, PET_EXPRESSIONS } from './api/pet.js'
+import { openChatWindow } from './api/chat.js'
 
 const pet = usePet()
 const { expressionRequest, renderPolicy, ready, sending, settings, settingsBusy, error, lastExpression, sendExpression, setVisible, setAlwaysOnTop, quit } = pet
@@ -38,6 +39,11 @@ async function selectItem(id) {
   try {
     if (PET_EXPRESSIONS.includes(id)) {
       if (await sendExpression(id)) await closeMenu()
+    } else if (id === 'chat') {
+      // 对话窗口是独立窗口；菜单先收起，免得挡住模型。
+      // 用 closeMenu(false) 不把焦点抢回画布——窗口切换由系统处理。
+      await openChatWindow()
+      await changeMenu('close', false)
     } else if (id === 'settings') {
       await openPetSettings()
       await changeMenu('close', false)

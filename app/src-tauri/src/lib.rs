@@ -1,6 +1,7 @@
 #[cfg(feature = "perf-audit")]
 mod audit;
 mod broadcast;
+mod chat_window;
 mod clock;
 mod commands;
 mod desktop;
@@ -20,6 +21,7 @@ pub fn run() {
         // 这样命令表在注册之后立刻就能拿到状态，前端不存在「读不到状态」的窗口期。
         .manage(settings::PetState::default())
         .manage(settings_window::SettingsWindowStore::default())
+        .manage(chat_window::ChatWindowStore::default())
         .manage(desktop::StartupNotices::default())
         .setup(|app| {
             if let Err(error) = tray::create(app.handle()) {
@@ -46,6 +48,7 @@ pub fn run() {
             commands::get_pet_settings,
             commands::get_pet_cursor_position,
             commands::open_pet_settings,
+            commands::open_chat_window,
             commands::set_pet_visible,
             commands::set_pet_max_fps,
             commands::set_pet_always_on_top,

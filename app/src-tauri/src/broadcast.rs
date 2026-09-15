@@ -15,7 +15,11 @@ pub const MAIN: &str = "main";
 
 /// 接收 Rust 事件的窗口标签（对应设计文档 §3 的窗口层）。
 /// 设置窗口的标签取自它自己的常量，避免同一个字符串写两遍。
-pub const WINDOW_LABELS: &[&str] = &[MAIN, crate::settings_window::SETTINGS_LABEL];
+pub const WINDOW_LABELS: &[&str] = &[
+    MAIN,
+    crate::settings_window::SETTINGS_LABEL,
+    crate::chat_window::CHAT_LABEL,
+];
 
 /// 发给指定窗口；窗口不存在时返回 `Err`。
 ///
@@ -55,7 +59,9 @@ pub fn emit_if_open(
 pub fn emit_all(app: &AppHandle, event: &str, payload: &impl Serialize) -> Vec<String> {
     let mut failures = Vec::new();
     for label in WINDOW_LABELS {
-        if let Err(error) = emit(app, label, event, payload) {
+        // 用 emit_if_open：设置窗口、对话窗口平时是关着的，那是正常状态，
+        // 不该变成一条弹给用户看的错误（与上面的文档承诺一致）。
+        if let Err(error) = emit_if_open(app, label, event, payload) {
             failures.push(error);
         }
     }
@@ -74,7 +80,7 @@ pub fn emit_all_except(
         if *label == excluded {
             continue;
         }
-        if let Err(error) = emit(app, label, event, payload) {
+        if let Err(error) = emit_if_open(app, label, event, payload) {
             failures.push(error);
         }
     }
@@ -89,6 +95,7 @@ mod tests {
     fn window_labels_cover_every_named_window_once() {
         assert!(WINDOW_LABELS.contains(&MAIN));
         assert!(WINDOW_LABELS.contains(&crate::settings_window::SETTINGS_LABEL));
+        assert!(WINDOW_LABELS.contains(&crate::chat_window::CHAT_LABEL));
         let mut sorted = WINDOW_LABELS.to_vec();
         sorted.sort_unstable();
         let count = sorted.len();

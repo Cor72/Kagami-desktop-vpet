@@ -11,14 +11,25 @@ test('随机表情排除上次实际表情，同时能选到其余每一种', ()
   assert.equal(pickExpression([], ''), null)
 })
 
-test('表情二级完全替换一级五个入口，返回在第五个位置', () => {
+test('表情二级完全替换一级六个入口，返回在第五个位置', () => {
   let state = transitionMenu('closed', 'context')
   assert.equal(state, 'root')
-  assert.deepEqual(getMenuItems(state).map(item => item.id), ['expressions', 'settings', 'always-on-top', 'hide', 'quit'])
+  assert.deepEqual(getMenuItems(state).map(item => item.id), ['expressions', 'chat', 'settings', 'always-on-top', 'hide', 'quit'])
   state = transitionMenu(state, 'expressions')
   assert.deepEqual(getMenuItems(state).map(item => item.id), ['smile', 'squint', 'tears', 'teardrop', 'back'])
   state = transitionMenu(state, 'back')
   assert.equal(state, 'root')
+})
+
+// 第 6 个球是「对话」：点它打开聊天窗口（分发在 App.vue 里）。
+// 图标名要与 PetBubbleMenu.vue 的 icons 表对上，否则圆球会渲染成空白。
+test('一级菜单含对话入口，且图标名是气泡菜单认识的键', () => {
+  const items = getMenuItems('root')
+  assert.equal(items.length, 6)
+  const chat = items.find(item => item.id === 'chat')
+  assert.ok(chat, '一级菜单里应有 chat')
+  assert.equal(chat.label, '对话')
+  assert.equal(chat.icon, 'message-circle')
 })
 
 test('Esc逐层返回，右键关闭所有层，设置不进入二级状态', () => {
