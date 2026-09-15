@@ -294,6 +294,12 @@ pub struct Signal {
     pub fullscreen: bool,
     /// 本地日期（`20260915`），用于每日额度跨天归零。
     pub local_day: u32,
+    /// 引擎是否被允许使用浏览器标签页标题。
+    ///
+    /// 放在 `Signal` 里而不是塞进 `classify` 的参数：这条标志描述的是
+    /// **「引擎被允许看到什么」**，和标题本身是同一类东西。关掉时浏览器的标题
+    /// 连看都不看，直接退回通用文案。
+    pub browser_titles_allowed: bool,
 }
 
 impl From<Sample> for Signal {
@@ -304,6 +310,8 @@ impl From<Sample> for Signal {
             idle_ms: sample.idle_ms,
             fullscreen: sample.fullscreen,
             local_day: sample.local_day,
+            // 采样本身不判断开关；`tick` 会按设置改写这一项。
+            browser_titles_allowed: true,
         }
     }
 }
@@ -335,13 +343,19 @@ pub fn classify(signal: &Signal) -> Option<AppMatch> {
             .as_deref()
             .and_then(extract_file_name_from_title),
         // 浏览器：站点必须先命中白名单，否则一行标题都不看，直接用通用文案。
-        TitleUse::BrowserTitle => match signal.window_title.as_deref().and_then(browser_site_of) {
-            Some(site) => {
-                lines = site.lines;
-                signal.window_title.as_deref().and_then(extract_page_title)
+        TitleUse::BrowserTitle => {
+            if !signal.browser_titles_allowed {
+                None
+            } else {
+                match signal.window_title.as_deref().and_then(browser_site_of) {
+                    Some(site) => {
+                        lines = site.lines;
+                        signal.window_title.as_deref().and_then(extract_page_title)
+                    }
+                    None => None,
+                }
             }
-            None => None,
-        },
+        }
         // 其余应用：标题整条丢弃，连传都不往下传。
         TitleUse::Discard => None,
     };
@@ -873,7 +887,9 @@ fn tick(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let signal = Signal::from(context::sample());
+    let mut signal = Signal::from(context::sample());
+    // 关掉「浏览器标题」时，引擎连看都不看那一项——不是看了之后再忽略。
+    signal.browser_titles_allowed = settings.browser_title_enabled;
     #[cfg(debug_assertions)]
     log_process_change(&signal);
 
@@ -947,6 +963,7 @@ mod tests {
             idle_ms,
             fullscreen: false,
             local_day: 20_260_915,
+            browser_titles_allowed: true,
         }
     }
 
@@ -1449,6 +1466,23 @@ mod tests {
         })
         .expect("浏览器应该在表里");
         assert_eq!(blog.detail, None, "页面标题里出现站点名不算命中");
+    }
+
+    /// 关掉「读浏览器标题」之后，引擎**连看都不看**那一项——
+    /// 不是看了之后再忽略。所以退回通用文案，且 detail 必须是 None。
+    #[test]
+    fn turning_browser_titles_off_hides_them_from_the_engine() {
+        let mut signal = signal(None, 0);
+        signal.process_name = Some("chrome.exe".into());
+        signal.window_title = Some("【中文】某视频 - 哔哩哔哩_bilibili - Google Chrome".into());
+        signal.browser_titles_allowed = false;
+
+        let matched = classify(&signal).expect("浏览器仍然在表里");
+        assert_eq!(matched.detail, None, "关掉之后页面标题一个字都不该用");
+        assert!(
+            matched.lines.iter().all(|line| !line.contains("{detail}")),
+            "退回的应该是通用文案"
+        );
     }
 
     #[test]

@@ -26,6 +26,12 @@ pub struct PetSettings {
     pub always_on_top: bool,
     /// 主动互动总开关。关掉之后 Rust 侧连采样都不做（见 `proactive.rs`）。
     pub proactive_enabled: bool,
+    /// 允许把浏览器标签页标题当内容用。
+    ///
+    /// 单独一个开关而不是跟着总开关走：这条通道会读到网银、公司内部系统、
+    /// 网页版聊天这类页面，而且内容会**发给第三方模型服务**。
+    /// 有个独立开关，才能一句话交代过去：「浏览器标题可以在设置里关掉」。
+    pub browser_title_enabled: bool,
 }
 
 impl Default for PetSettings {
@@ -36,6 +42,7 @@ impl Default for PetSettings {
             max_fps: 30,
             always_on_top: true,
             proactive_enabled: true,
+            browser_title_enabled: true,
         }
     }
 }
@@ -63,12 +70,15 @@ pub struct StoredSettings {
 #[serde(rename_all = "camelCase", default)]
 pub struct StoredProactive {
     pub enabled: bool,
+    /// 是否允许用浏览器标签页标题（老文件里没有这一项，默认开着）。
+    pub browser_title: bool,
 }
 
 impl Default for StoredProactive {
     fn default() -> Self {
         Self {
             enabled: PetSettings::default().proactive_enabled,
+            browser_title: PetSettings::default().browser_title_enabled,
         }
     }
 }
@@ -90,6 +100,7 @@ pub enum SettingsChange {
     MaxFps(u32),
     AlwaysOnTop(bool),
     ProactiveEnabled(bool),
+    BrowserTitleEnabled(bool),
 }
 
 impl PetSettings {
@@ -103,6 +114,7 @@ impl PetSettings {
             SettingsChange::Visible(visible) => next.visible = visible,
             SettingsChange::AlwaysOnTop(enabled) => next.always_on_top = enabled,
             SettingsChange::ProactiveEnabled(enabled) => next.proactive_enabled = enabled,
+            SettingsChange::BrowserTitleEnabled(enabled) => next.browser_title_enabled = enabled,
             SettingsChange::MaxFps(fps) => {
                 if !is_supported_fps(fps) {
                     return Err("帧率只能是 15 或 30".into());
@@ -129,6 +141,7 @@ impl PetSettings {
                     max_fps: fallback_fps,
                     always_on_top: stored.always_on_top,
                     proactive_enabled: stored.proactive.enabled,
+                    browser_title_enabled: stored.proactive.browser_title,
                     ..Self::default()
                 },
                 Some(format!(
@@ -142,6 +155,7 @@ impl PetSettings {
                 max_fps: stored.max_fps,
                 always_on_top: stored.always_on_top,
                 proactive_enabled: stored.proactive.enabled,
+                browser_title_enabled: stored.proactive.browser_title,
                 ..Self::default()
             },
             None,
@@ -155,6 +169,7 @@ impl PetSettings {
             always_on_top: self.always_on_top,
             proactive: StoredProactive {
                 enabled: self.proactive_enabled,
+                browser_title: self.browser_title_enabled,
             },
         }
     }
@@ -271,6 +286,7 @@ mod tests {
                 max_fps: 15,
                 always_on_top: false,
                 proactive_enabled: true,
+                browser_title_enabled: true,
             }
         );
         assert_eq!(settings, result);

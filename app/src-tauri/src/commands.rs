@@ -272,6 +272,18 @@ pub fn set_proactive_enabled(app: tauri::AppHandle, enabled: bool) -> Result<Pet
     desktop::update_settings(&app, SettingsChange::ProactiveEnabled(enabled))
 }
 
+/// 浏览器标题开关。
+///
+/// 跟主动互动总开关一样走 `desktop::update_settings`，于是落盘、广播、托盘同步三件事都有。
+/// 单独一个命令而不是复用总开关：用户可能希望桌宠照常陪着，但不希望它读浏览器标题。
+#[tauri::command]
+pub fn set_browser_title_enabled(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<PetSettings, String> {
+    desktop::update_settings(&app, SettingsChange::BrowserTitleEnabled(enabled))
+}
+
 /// 气泡消失时回报一句：`acknowledged` = 用户**主动点掉了**它。
 ///
 /// **只有主动点掉才计入降频。** 自己淡出不计分：桌宠窗口可能在别的窗口后面、

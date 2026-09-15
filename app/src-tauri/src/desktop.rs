@@ -53,7 +53,9 @@ pub fn update_settings(app: &AppHandle, change: SettingsChange) -> Result<PetSet
                 SettingsChange::Visible(false) => window.hide(),
                 SettingsChange::AlwaysOnTop(enabled) => window.set_always_on_top(enabled),
                 // 帧率与主动互动都不需要动窗口，只改状态与落盘。
-                SettingsChange::MaxFps(_) | SettingsChange::ProactiveEnabled(_) => Ok(()),
+                SettingsChange::MaxFps(_)
+                | SettingsChange::ProactiveEnabled(_)
+                | SettingsChange::BrowserTitleEnabled(_) => Ok(()),
             };
             result.map_err(|error| error.to_string())
         })?;

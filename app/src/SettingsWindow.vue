@@ -7,7 +7,7 @@ import { PROVIDERS, isCustomProvider } from './composables/aiConfig.js'
 import { onExpressionObserved, reloadPetModel, requestExpression } from './api/pet.js'
 
 const shared = usePetSettings()
-const { ready, settings, settingsBusy, error, setMaxFps, setAlwaysOnTop, setProactiveEnabled } = shared
+const { ready, settings, settingsBusy, error, setMaxFps, setAlwaysOnTop, setProactiveEnabled, setBrowserTitleEnabled } = shared
 // AI 一节：与对话窗口共享同一份 Rust 状态，谁改了另一边都会收到 ai-config-changed。
 const {
   ready: aiReady, config: aiConfig, busy: aiBusy, testing: aiTesting, error: aiError,
@@ -84,8 +84,12 @@ async function removeKey() {
         <button id="pet-pin" class="toggle" role="switch" :aria-checked="settings?.alwaysOnTop ?? false" aria-labelledby="pin-label" :disabled="!ready || settingsBusy" @click="setAlwaysOnTop(!settings?.alwaysOnTop)"><span /></button>
       </div>
       <div class="setting-row">
-        <div><label id="proactive-label" for="pet-proactive">主动互动</label><p>八千代会自己冒一句话。只看前台程序的<b>名字</b>，标题只对已知编辑器取文件名；聊天软件和浏览器里在做什么一概不看</p></div>
+        <div><label id="proactive-label" for="pet-proactive">主动互动</label><p>八千代会自己冒一句话。只看前台程序的<b>名字</b>；聊天软件里在做什么一概不看</p></div>
         <button id="pet-proactive" class="toggle" role="switch" :aria-checked="settings?.proactiveEnabled ?? true" aria-labelledby="proactive-label" :disabled="!ready || settingsBusy" @click="setProactiveEnabled(!settings?.proactiveEnabled)"><span /></button>
+      </div>
+      <div class="setting-row">
+        <div><label id="browser-title-label" for="pet-browser-title">读浏览器标题</label><p>认得<b>哔哩哔哩 / YouTube / GitHub / 知乎</b>这几个站点时，会对你在看的页面说一句。这几站的<b>页面标题会发给 DeepSeek</b>；认不出的站点一个字都不读，网银和内部系统都在这条安全线之外</p></div>
+        <button id="pet-browser-title" class="toggle" role="switch" :aria-checked="settings?.browserTitleEnabled ?? true" aria-labelledby="browser-title-label" :disabled="!ready || settingsBusy" @click="setBrowserTitleEnabled(!settings?.browserTitleEnabled)"><span /></button>
       </div>
     </section>
     <p class="settings-note"><Pin :size="13" aria-hidden="true" />设置即时生效，也可从托盘找回八千代。</p>
