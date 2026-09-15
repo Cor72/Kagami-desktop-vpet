@@ -4,7 +4,7 @@ use crate::{
         config::{AiConfigPatch, AiConfigView, Provider},
         secret,
     },
-    broadcast, chat, chat_store, chat_window, clock, desktop,
+    broadcast, chat, chat_store, chat_window, clock, context, desktop,
     expression::validate_expression,
     proactive,
     settings::{PetSettings, SettingsChange},
@@ -202,13 +202,60 @@ pub fn cancel_stream(app: tauri::AppHandle, session_id: String) -> Result<Cancel
 #[derive(Clone, Serialize)]
 pub struct ProactiveStateView {
     pub enabled: bool,
+    /// 今天是否处在「别烦我」状态。跨天自动变回 `false`。
+    pub muted_today: bool,
+}
+
+/// 组装主动互动的状态快照。
+///
+/// **先读设置、再锁主动互动**，固定这个顺序，避免和别处的加锁顺序反过来造成死锁。
+fn proactive_state_view(app: &tauri::AppHandle) -> Result<ProactiveStateView, String> {
+    let enabled = desktop::get_settings(app)?.proactive_enabled;
+    let muted_today = {
+        let store = app.state::<proactive::ProactiveStore>();
+        let state = store.0.lock().map_err(|error| error.to_string())?;
+        proactive::is_muted_today(&state, context::local_day())
+    };
+    Ok(ProactiveStateView {
+        enabled,
+        muted_today,
+    })
 }
 
 #[tauri::command]
 pub fn get_proactive_state(app: tauri::AppHandle) -> Result<ProactiveStateView, String> {
-    Ok(ProactiveStateView {
-        enabled: desktop::get_settings(&app)?.proactive_enabled,
-    })
+    proactive_state_view(&app)
+}
+
+/// 「今天别烦我」：今天剩下的时间一句都不说。
+///
+/// 这是**手动静默**的入口——早先那版会按时段（23:00–08:00）自动闭嘴，
+/// 那等于替用户定作息，而且半夜写代码的人只会觉得功能坏了。静默该由用户按下。
+#[tauri::command]
+pub fn mute_proactive_today(app: tauri::AppHandle) -> Result<ProactiveStateView, String> {
+    set_proactive_mute(&app, true)?;
+    proactive_state_view(&app)
+}
+
+/// 解除「今天别烦我」。
+#[tauri::command]
+pub fn clear_proactive_mute(app: tauri::AppHandle) -> Result<ProactiveStateView, String> {
+    set_proactive_mute(&app, false)?;
+    proactive_state_view(&app)
+}
+
+/// 把「今天别烦我」设成指定状态，返回设置之后的状态。
+/// 命令与托盘菜单共用这一个入口，保证两条路径的行为一致。
+pub fn set_proactive_mute(app: &tauri::AppHandle, muted: bool) -> Result<bool, String> {
+    let day = context::local_day();
+    let store = app.state::<proactive::ProactiveStore>();
+    let mut state = store.0.lock().map_err(|error| error.to_string())?;
+    if muted {
+        proactive::mute_today(&mut state, day)
+    } else {
+        proactive::unmute(&mut state)
+    };
+    Ok(muted)
 }
 
 /// 一键开关。走 `desktop::update_settings`，于是落盘、广播、托盘三件事都有。
@@ -217,12 +264,20 @@ pub fn get_proactive_state(app: tauri::AppHandle) -> Result<ProactiveStateView, 
 /// 不必再回读一次，也就不会出现「点了开关、界面慢半拍」。
 #[tauri::command]
 pub fn set_proactive_enabled(app: tauri::AppHandle, enabled: bool) -> Result<PetSettings, String> {
+    // 重新打开开关 = 「我想让它说话」，顺手解除「今天别烦我」。
+    // 否则用户会撞上「开关明明是开的，它却一整天不理我」。
+    if enabled {
+        let _ = set_proactive_mute(&app, false);
+    }
     desktop::update_settings(&app, SettingsChange::ProactiveEnabled(enabled))
 }
 
-/// 气泡消失时回报一句：`acknowledged` = 用户点了它。
+/// 气泡消失时回报一句：`acknowledged` = 用户**主动点掉了**它。
 ///
-/// 没点就算「被忽略」一次，连续三次之后同类冷却翻倍（计划 §8.4）。
+/// **只有主动点掉才计入降频。** 自己淡出不计分：桌宠窗口可能在别的窗口后面、
+/// 或者在屏幕角落，用户根本没看见——把「没看见」当成「不想看」，
+/// 会让这个功能因为一件用户没做过的事把自己静音。
+/// 连续三次被点掉之后同类冷却翻倍（计划 §8.4）。
 /// 回报的编号对不上当前那句时返回 `ok: false`——重复回报不该重复计数。
 #[tauri::command]
 pub fn proactive_dismiss(
@@ -241,10 +296,10 @@ pub fn proactive_dismiss(
         if acknowledged {
             "被点掉"
         } else {
-            "自己淡出"
+            "自己淡出，不计分"
         },
         if ok {
-            "已计入"
+            "已记录"
         } else {
             "不是当前那句，忽略"
         }

@@ -8,7 +8,7 @@
 //! | 前台进程名 | `GetWindowThreadProcessId` + `OpenProcess` + `QueryFullProcessImageNameW` |
 //! | 空闲时长 | `GetLastInputInfo` |
 //! | 是否全屏 | `GetWindowRect` + `MonitorFromWindow` / `GetMonitorInfoW` |
-//! | 本地日期与小时 | `GetLocalTime`（静默时段用） |
+//! | 本地日期 | `GetLocalTime`（每日额度跨天归零、「今天别烦我」的到期判断） |
 //!
 //! **「打开某个程序」用「前台窗口变化」判断，不轮询进程表**（计划 §8.3）：
 //!
@@ -50,21 +50,17 @@ pub struct Sample {
     pub fullscreen: bool,
     /// 本地日期，形如 `20260915`。用于「每日额度」跨天归零。
     pub local_day: u32,
-    /// 本地小时（0–23）。用于静默时段。
-    pub local_hour: u32,
 }
 
 /// 采一次样。任何一项读不到都不算错误：返回 `None` / 0，规则引擎会当作「不触发」。
 pub fn sample() -> Sample {
     let window = foreground_window();
-    let (local_day, local_hour) = local_now();
     Sample {
         process_name: window.and_then(process_name_of),
         window_title: window.and_then(window_title_of),
         idle_ms: idle_ms(),
         fullscreen: window.map(is_fullscreen).unwrap_or(false),
-        local_day,
-        local_hour,
+        local_day: local_day(),
     }
 }
 
@@ -174,10 +170,13 @@ fn idle_ms() -> u64 {
 }
 
 /// 本地日期（`20260915`）与小时。宽限期：`GetLocalTime` 是唯一带时区的时钟来源。
-fn local_now() -> (u32, u32) {
+/// 本地日期，形如 `20260915`。
+///
+/// 只到「日」这一级：每日额度跨天归零、以及「今天别烦我」的到期判断都用它。
+/// 早先还取过小时用于按时段自动静默，那条规则已经移除（静默改成手动）。
+pub fn local_day() -> u32 {
     let time = unsafe { GetLocalTime() };
-    let day = u32::from(time.wYear) * 10_000 + u32::from(time.wMonth) * 100 + u32::from(time.wDay);
-    (day, u32::from(time.wHour))
+    u32::from(time.wYear) * 10_000 + u32::from(time.wMonth) * 100 + u32::from(time.wDay)
 }
 
 #[cfg(test)]
@@ -234,13 +233,8 @@ mod tests {
     #[test]
     fn sampling_never_panics_and_returns_sane_values() {
         // 不假设前台窗口是什么：这条测试只要求采样能安全跑完，
-        // 并且本地时间落在合理范围内（它在测试进程里也确实读得到）。
+        // 并且本地日期落在合理范围内（它在测试进程里也确实读得到）。
         let sample = sample();
-        assert!(
-            sample.local_hour < 24,
-            "小时应在 0–23：{}",
-            sample.local_hour
-        );
         assert!(
             sample.local_day >= 20_240_101 && sample.local_day <= 99_991_231,
             "日期应形如 yyyymmdd：{}",

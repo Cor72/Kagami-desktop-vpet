@@ -16,6 +16,7 @@ struct TrayMenu {
     always_on_top: CheckMenuItem<tauri::Wry>,
     fps_30: CheckMenuItem<tauri::Wry>,
     fps_15: CheckMenuItem<tauri::Wry>,
+    mute_today: CheckMenuItem<tauri::Wry>,
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
@@ -31,6 +32,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let fps_30 = CheckMenuItem::with_id(app, "fps-30", "30 FPS", true, true, None::<&str>)?;
     let fps_15 = CheckMenuItem::with_id(app, "fps-15", "15 FPS", true, false, None::<&str>)?;
     let frame_rate = Submenu::with_items(app, "帧率", true, &[&fps_30, &fps_15])?;
+    // 手动静默：今天剩下的时间一句都不说。跨天自动失效，所以勾选状态不需要持久化。
+    let mute_today =
+        CheckMenuItem::with_id(app, "mute-today", "今天别烦我", true, false, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "退出八千代", true, None::<&str>)?;
     let menu = Menu::with_items(
@@ -40,6 +44,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             &always_on_top,
             &expressions,
             &frame_rate,
+            &mute_today,
             &separator,
             &quit,
         ],
@@ -83,6 +88,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         always_on_top,
         fps_30,
         fps_15,
+        mute_today,
     });
     Ok(())
 }
@@ -102,6 +108,17 @@ fn handle_menu(app: &AppHandle, id: &str) -> Result<(), String> {
         }
         "fps-15" => {
             desktop::update_settings(app, SettingsChange::MaxFps(15))?;
+        }
+        "mute-today" => {
+            // 不依赖系统复选框的自动翻转：先问自己的状态，再取反，最后把勾选写成实际值。
+            // 这样即使某个平台的菜单没有自动翻转，界面也不会和真实状态脱节。
+            let current = commands::get_proactive_state(app.clone())?.muted_today;
+            let muted = commands::set_proactive_mute(app, !current)?;
+            if let Some(menu) = app.try_state::<TrayMenu>() {
+                menu.mute_today
+                    .set_checked(muted)
+                    .map_err(|error| error.to_string())?;
+            }
         }
         "smile" | "squint" | "tears" | "teardrop" => {
             commands::request_expression(app.clone(), id.into())?

@@ -13,9 +13,13 @@
 //! 防线的分工（计划 §8.4）：
 //!
 //! - **额度与冷却**决定最坏情况：事件型同类 5 分钟，状态型同类 20 分钟，每天合计 ≤ 30 条；
-//! - **静默规则**决定什么时候绝对不说：静默时段、全屏（状态型）、用户正在输入（延后）、
-//!   桌宠隐藏或最小化（连采样都不做，见 [`start`]）；
-//! - **连续被忽略 3 次**之后同类冷却翻倍——这条才是核心，它让这个功能自己收敛到安静。
+//! - **静默规则**决定什么时候绝对不说：全屏（状态型）、用户正在输入（延后）、
+//!   当天被手动静音（「今天别烦我」）、桌宠隐藏或最小化（连采样都不做，见 [`start`]）；
+//! - **连续被点掉 3 次**之后同类冷却翻倍——这条才是核心，它让这个功能自己收敛到安静。
+//!
+//! **没有按时段自动静默。** 早先那版会在 23:00–08:00 无条件闭嘴，那是替用户拍板定作息：
+//! 半夜写代码的人会发现这个功能"不工作"，而且不会收到任何提示。静默改成手动的
+//! （总开关 + [`mute_today`]）。
 
 // TODO: 八千代的角色设定稿确定后，替换这里的文案与语气。
 // 相关系统提示词同样待补（见 ai/persona.rs）。
@@ -34,7 +38,7 @@ use crate::{clock, desktop};
 /// 采样间隔：低频采样，只在信号变化时才判断（计划 §8.1）。
 pub const SAMPLE_INTERVAL_MS: u64 = 5_000;
 /// 气泡显示时长，与 `PetSpeechBubble.vue` 的默认值一致。
-const TTL_MS: u64 = 5_000;
+const TTL_MS: u64 = 8_000;
 /// 空闲多久算「离开了」。计划给的范围是 3–10 分钟、默认 5 分钟。
 pub const IDLE_THRESHOLD_MS: u64 = 5 * 60_000;
 /// 状态型触发（闲置问候 / 回到活跃）的同类冷却。
@@ -43,14 +47,11 @@ const STATE_COOLDOWN_MS: u64 = 20 * 60_000;
 const APP_COOLDOWN_MS: u64 = 5 * 60_000;
 /// 每日总量上限（兜底，不是主力约束）。
 const DAILY_LIMIT: u32 = 30;
-/// 静默时段：23:00–08:00。
-const QUIET_FROM_HOUR: u32 = 23;
-const QUIET_UNTIL_HOUR: u32 = 8;
 /// 「最近有键盘/鼠标输入」的判定窗口：这期间不说，等用户停手（计划 §8.4）。
 const RECENT_INPUT_MS: u64 = 30_000;
 /// 「等停下来再说」的那一句最多等这么久，过期就作废——三分钟前的场景已经不成立了。
 const PENDING_TTL_MS: u64 = 3 * 60_000;
-/// 连续被忽略几次之后同类冷却翻倍。**不可关闭的机制**（计划 §8.4）。
+/// 连续被**点掉**几次之后同类冷却翻倍。**不可关闭的机制**（计划 §8.4）。
 const IGNORED_STREAK_LIMIT: u32 = 3;
 /// 编辑器标题里提取出来的文件名最多留这么长，免得撑爆气泡。
 const DETAIL_MAX_CHARS: usize = 24;
@@ -223,8 +224,6 @@ pub struct Signal {
     pub fullscreen: bool,
     /// 本地日期（`20260915`），用于每日额度跨天归零。
     pub local_day: u32,
-    /// 本地小时，用于静默时段。
-    pub local_hour: u32,
 }
 
 impl From<Sample> for Signal {
@@ -235,7 +234,6 @@ impl From<Sample> for Signal {
             idle_ms: sample.idle_ms,
             fullscreen: sample.fullscreen,
             local_day: sample.local_day,
-            local_hour: sample.local_hour,
         }
     }
 }
@@ -346,8 +344,13 @@ pub struct ProactiveState {
     started: bool,
     last_process: Option<String>,
     was_idle: bool,
-    /// 连续被忽略的次数（用户没点那条气泡）。
+    /// 连续被**点掉**的次数。见 [`dismiss`]：自己淡出不计分。
     ignored_streak: u32,
+    /// 「今天别烦我」：被静音的本地日期。日期一变就自动失效。
+    ///
+    /// **只活在内存里**——重启会清掉。这是有意的取舍：桌宠本来就长期常驻，
+    /// 而把它做成持久化字段要额外处理「昨天静的音今天还算不算」这类边界。
+    muted_day: Option<u32>,
     /// 今天已经说了几条。`day` 变了就归零。
     spoken_today: u32,
     day: u32,
@@ -369,6 +372,7 @@ impl Default for ProactiveState {
             last_process: None,
             was_idle: false,
             ignored_streak: 0,
+            muted_day: None,
             spoken_today: 0,
             day: 0,
             cooldowns: HashMap::new(),
@@ -400,6 +404,13 @@ pub fn should_speak(signal: &Signal, state: &mut ProactiveState, now_ms: u64) ->
     if !state.started {
         // 第一帧没有「上一次」可比，只建立基线。
         state.started = true;
+        return None;
+    }
+
+    if state.muted_day == Some(signal.local_day) {
+        // 「今天别烦我」：今天不再说任何话。
+        // 基线在上面已经照记了，所以明天解除静音时不会把「你此刻在用什么程序」
+        // 当成一次新事件播报出来。
         return None;
     }
 
@@ -455,21 +466,44 @@ pub fn should_speak(signal: &Signal, state: &mut ProactiveState, now_ms: u64) ->
     None
 }
 
-/// 回报一句气泡的结局。`acknowledged` = 用户点了它。
+/// 回报一句气泡的结局。`acknowledged` = 用户**主动点掉了**它。
 ///
-/// 没点（自己淡出、被菜单挤掉）就算「被忽略」一次；连续 [`IGNORED_STREAK_LIMIT`] 次
-/// 之后同类冷却翻倍。返回 `false` 说明这个编号不是当前那句（重复回报、过期回报）。
+/// **只有主动点掉才计入降频。** 自己淡出不计分，因为那不代表用户不想看——
+/// 桌宠窗口可能在别的窗口后面、或者在屏幕角落，用户压根没看见。
+/// 把「没看见」当成「不想看」，会让这个功能因为一件用户没做过的事把自己静音：
+/// 气泡显示 8 秒、用户正盯着编辑器，攒够 3 次冷却就永久翻倍了。
+///
+/// 连点掉 [`IGNORED_STREAK_LIMIT`] 次之后同类冷却翻倍，计数在跨天时归零。
+/// 返回 `false` 说明这个编号不是当前那句（重复回报、过期回报）。
 pub fn dismiss(state: &mut ProactiveState, id: &str, acknowledged: bool) -> bool {
     if state.last_spoken.as_deref() != Some(id) {
         return false;
     }
     if acknowledged {
-        state.ignored_streak = 0;
-    } else {
         state.ignored_streak = state.ignored_streak.saturating_add(1);
     }
     state.last_spoken = None;
     true
+}
+
+/// 「今天别烦我」：今天剩下的时间一句都不说。
+///
+/// 取代了早先那套按时段自动静默——静默该由用户按下，不该由钟表替他决定。
+/// 返回 `true` 表示这次调用真的改变了状态（方便前端做反馈）。
+pub fn mute_today(state: &mut ProactiveState, local_day: u32) -> bool {
+    let already = state.muted_day == Some(local_day);
+    state.muted_day = Some(local_day);
+    !already
+}
+
+/// 解除「今天别烦我」。设置里重新打开开关时也走这里。
+pub fn unmute(state: &mut ProactiveState) -> bool {
+    state.muted_day.take().is_some()
+}
+
+/// 今天是否处在「别烦我」状态。
+pub fn is_muted_today(state: &ProactiveState, local_day: u32) -> bool {
+    state.muted_day == Some(local_day)
 }
 
 fn try_speak(
@@ -478,8 +512,7 @@ fn try_speak(
     signal: &Signal,
     now_ms: u64,
 ) -> Option<Utterance> {
-    // 静默时段对所有触发一视同仁。
-    if is_quiet_hour(signal.local_hour) || state.spoken_today >= DAILY_LIMIT {
+    if state.spoken_today >= DAILY_LIMIT {
         return None;
     }
     // 全屏静默只管状态型：§6.4 与阶段 B 的验收都要求「打开游戏时冒一句」，
@@ -541,7 +574,7 @@ fn take_ready_pending(
     }
 
     state.pending = None;
-    if is_quiet_hour(signal.local_hour) || state.spoken_today >= DAILY_LIMIT {
+    if state.spoken_today >= DAILY_LIMIT {
         return None;
     }
     mark_spoken(
@@ -569,11 +602,6 @@ fn take_ready_pending(
 /// 而不是「你不动我就不说」。
 fn defers_for_recent_input(kind: Kind, signal: &Signal) -> bool {
     kind != Kind::Back && signal.idle_ms < RECENT_INPUT_MS
-}
-
-fn is_quiet_hour(hour: u32) -> bool {
-    // 静默是「23:00 到次日 8:00」，也就是清醒时段（8:00–22:59）之外。
-    !(QUIET_UNTIL_HOUR..QUIET_FROM_HOUR).contains(&hour)
 }
 
 fn cooldown_passed(state: &ProactiveState, key: &str, now_ms: u64) -> bool {
@@ -612,6 +640,8 @@ fn reset_daily_budget(state: &mut ProactiveState, local_day: u32) {
     if state.day != local_day {
         state.day = local_day;
         state.spoken_today = 0;
+        // 「被点掉」的计数也跨天归零：昨天嫌烦，不代表今天也嫌烦。
+        state.ignored_streak = 0;
     }
 }
 
@@ -777,7 +807,6 @@ mod tests {
             idle_ms,
             fullscreen: false,
             local_day: 20_260_915,
-            local_hour: 14,
         }
     }
 
@@ -927,45 +956,19 @@ mod tests {
     }
 
     #[test]
-    fn quiet_hours_and_the_daily_budget_silence_everything() {
+    fn the_daily_budget_silences_everything_until_the_day_rolls_over() {
         let mut state = ready_state("explorer.exe");
-        // 每次都换一个已登记的程序，确保被挡下来的是静默规则，而不是「程序没变」。
-        let night_processes = [
-            "Code.exe",
-            "chrome.exe",
-            "cloudmusic.exe",
-            "GenshinImpact.exe",
-        ];
-        for (index, process) in night_processes.iter().enumerate() {
-            let mut night = settled(process);
-            night.local_hour = if index % 2 == 0 { 23 } else { 3 };
-            assert_eq!(
-                should_speak(&night, &mut state, NOW + index as u64 * 1_000),
-                None,
-                "{process} 在静默时段不该说话"
-            );
-        }
-
-        // 8 点整已经可以说话。
-        let mut morning = settled("Code.exe");
-        morning.local_hour = 8;
-        assert!(
-            should_speak(&morning, &mut state, NOW + 10_000).is_some(),
-            "8 点整已经可以说话"
-        );
-
-        // 额度用完就不说了：换分类绕开冷却，确保挡它的是额度。
+        // 先把「当天」对齐：否则第一次调用会走跨天归零，把下面预设的额度擦掉。
+        state.day = 20_260_915;
+        // 额度用完就不说了。
         state.spoken_today = DAILY_LIMIT;
-        let mut evening = settled("chrome.exe");
-        evening.local_hour = 20;
         assert_eq!(
-            should_speak(&evening, &mut state, NOW + 20_000),
+            should_speak(&settled("Code.exe"), &mut state, NOW + 20_000),
             None,
             "今天的额度用完了"
         );
         // 第二天归零。
         let mut tomorrow = settled("cloudmusic.exe");
-        tomorrow.local_hour = 20;
         tomorrow.local_day = 20_260_916;
         assert!(
             should_speak(&tomorrow, &mut state, NOW + 30_000).is_some(),
@@ -975,29 +978,98 @@ mod tests {
     }
 
     #[test]
-    fn ignored_streak_doubles_the_cooldown_and_clicking_resets_it() {
+    fn mute_today_silences_all_three_triggers_and_expires_with_the_date() {
+        let mut state = ready_state("explorer.exe");
+        assert!(mute_today(&mut state, 20_260_915));
+        assert!(is_muted_today(&state, 20_260_915));
+        assert!(!mute_today(&mut state, 20_260_915), "重复按下不算改变");
+
+        // 今天剩下的时间，三种触发一句都不说。
+        for (index, process) in ["Code.exe", "chrome.exe", "cloudmusic.exe"]
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                should_speak(&settled(process), &mut state, NOW + index as u64 * 1_000),
+                None,
+                "{process} 在「今天别烦我」期间不该说话"
+            );
+        }
+        assert_eq!(
+            should_speak(
+                &signal(Some("explorer.exe"), IDLE_THRESHOLD_MS),
+                &mut state,
+                NOW + 10_000
+            ),
+            None,
+            "闲置问候也该被静音"
+        );
+        assert_eq!(
+            should_speak(&signal(Some("explorer.exe"), 0), &mut state, NOW + 11_000),
+            None,
+            "回到活跃也该被静音"
+        );
+
+        // 跨天自动失效。
+        let mut tomorrow = settled("Code.exe");
+        tomorrow.local_day = 20_260_916;
+        assert!(
+            should_speak(&tomorrow, &mut state, NOW + 20_000).is_some(),
+            "跨天之后「今天别烦我」自动失效"
+        );
+    }
+
+    #[test]
+    fn unmute_lets_it_speak_again_the_same_day() {
+        let mut state = ready_state("explorer.exe");
+        mute_today(&mut state, 20_260_915);
+        assert!(unmute(&mut state));
+        assert!(!is_muted_today(&state, 20_260_915));
+        assert!(!unmute(&mut state), "已经解除了，再调用不算改变");
+        assert!(
+            should_speak(&settled("Code.exe"), &mut state, NOW).is_some(),
+            "解除之后当天可以正常说话"
+        );
+    }
+
+    #[test]
+    fn only_clicking_counts_toward_the_cooldown() {
         let mut state = ready_state("explorer.exe");
         let first = should_speak(&settled("Code.exe"), &mut state, NOW).expect("第一句");
 
-        // 气泡自己淡掉了：算被忽略一次。
+        // 气泡自己淡掉了：**不计分**。桌宠窗口可能在别的窗口后面、或在屏幕角落，
+        // 用户根本没看见；把「没看见」当成「不想看」会让功能因为用户没做过的事静音。
         assert!(dismiss(&mut state, &first.id, false));
-        assert_eq!(state.ignored_streak, 1);
+        assert_eq!(state.ignored_streak, 0, "自己淡出不算被点掉");
         // 重复回报同一个编号不算数。
-        assert!(!dismiss(&mut state, &first.id, false));
+        assert!(!dismiss(&mut state, &first.id, true));
+        assert_eq!(state.ignored_streak, 0);
+
+        // 用户主动点掉一次，才开始计数。
+        let mut state = ready_state("explorer.exe");
+        let first = should_speak(&settled("Code.exe"), &mut state, NOW).expect("第一句");
+        assert!(dismiss(&mut state, &first.id, true));
         assert_eq!(state.ignored_streak, 1);
 
-        // 攒够 3 次之后，冷却从 5 分钟变成 10 分钟。
+        // 点掉 3 次之后，冷却从 5 分钟变成 10 分钟。
         state.ignored_streak = IGNORED_STREAK_LIMIT;
         let second = should_speak(&settled("idea64.exe"), &mut state, NOW + 6 * 60_000)
             .expect("冷却过了就能再说");
         assert_eq!(
             state.cooldowns.get("app:editor").copied(),
             Some(NOW + 6 * 60_000 + APP_COOLDOWN_MS * 2),
-            "连续被忽略之后冷却翻倍"
+            "被点掉三次之后冷却翻倍"
         );
-        // 用户点了一次：连续被忽略中断。
-        assert!(dismiss(&mut state, &second.id, true));
-        assert_eq!(state.ignored_streak, 0);
+        assert!(
+            dismiss(&mut state, &second.id, false),
+            "淡出也能结束这条记录"
+        );
+
+        // 跨天归零：昨天嫌烦不代表今天也嫌烦。
+        let mut tomorrow = settled("chrome.exe");
+        tomorrow.local_day = 20_260_916;
+        assert!(should_speak(&tomorrow, &mut state, NOW + 7 * 60_000).is_some());
+        assert_eq!(state.ignored_streak, 0, "跨天计数归零");
     }
 
     #[test]

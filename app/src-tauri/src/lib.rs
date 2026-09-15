@@ -78,6 +78,8 @@ pub fn run() {
             commands::cancel_stream,
             commands::get_proactive_state,
             commands::set_proactive_enabled,
+            commands::mute_proactive_today,
+            commands::clear_proactive_mute,
             commands::proactive_dismiss,
         ])
         .run(tauri::generate_context!())

@@ -13,7 +13,9 @@ import { clampSpeechText } from '../composables/speechBubble.js'
 
 const props = defineProps({
   text: { type: String, required: true },
-  ttlMs: { type: Number, default: 5000 },
+  // 默认值与 Rust 侧 `proactive::TTL_MS` 保持一致。8 秒而不是 5 秒：
+  // 用户可能正盯着别的窗口，5 秒太容易整条错过。
+  ttlMs: { type: Number, default: 8000 },
 })
 const emit = defineEmits(['expired', 'closed'])
 

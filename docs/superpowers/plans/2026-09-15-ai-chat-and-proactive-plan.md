@@ -104,6 +104,7 @@
 - 同时只显示一条，新消息直接替换旧的
 - 文本上限约 40 字，超出折行，最多 3 行
 - 透明区域**不能挡住模型**：组件根节点默认 `pointer-events: none`，只有气泡本体 `pointer-events: auto`
+- 显示时长 **8 秒**（`ttlMs`，默认值与 Rust 侧 `proactive::TTL_MS` 一致）。不用 5 秒：用户可能正盯着别的窗口，5 秒太容易整条错过
 - 与气泡菜单**互斥**：菜单打开时不显示气泡，反之亦然
 
 **触发来源**：监听 Rust 事件 `proactive-speak`，载荷 `{ id, text, ttlMs }`。
@@ -392,7 +393,7 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
 | 每日总量 | ≤ 30 条 |
 | 连续被忽略 3 次 | 冷却翻倍（**不可关闭的机制**） |
 | 静默：全屏应用 | 不说 |
-| 静默：23:00–08:00 | 不说 |
+| 静默：当天被手动静音（托盘「今天别烦我」） | 不说，跨天自动失效 |
 | 静默：最近 30 秒内有键盘输入 | 延后 |
 | 静默：桌宠隐藏 / 最小化 | 停止采集，不产生任何模型调用 |
 
@@ -505,7 +506,7 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
 
 **前端**
 
-- `PetSpeechBubble.vue`：绝对定位、**不改窗口尺寸**、5 秒淡出、与气泡菜单互斥
+- `PetSpeechBubble.vue`：绝对定位、**不改窗口尺寸**、8 秒淡出、与气泡菜单互斥
 - 设置里加主动互动开关
 
 **触发放三条**：空闲 ≥ 5 分钟、回到活跃、检测到某程序启动。
