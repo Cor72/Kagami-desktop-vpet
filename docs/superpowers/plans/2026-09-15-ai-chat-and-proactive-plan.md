@@ -559,6 +559,21 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
     unused / dead_code 并报警告**。打包时才发现过一次（`ai/agent.rs` 的轮次变量、
     `proactive.rs` 的两个 `label()`）。
     **打包是唯一能发现这类问题的步骤**，所以「第四阶段：打包」不是可选项。
+14. **发布打包前先屏蔽编译机路径。** Rust 会把 `panic!` 的源文件路径编进二进制——
+    实测未处理时 `yachiyo-desktop.exe` 里有 **668 处** `C:\Users\<用户名>`，
+    绝大多数来自依赖库（cargo registry 里那些 `.rs`）的 panic 位置。
+    这**不是用户数据**（API Key 与聊天记录都不在二进制里，已用字节级扫描确认过），
+    但它会暴露「编译这台机器叫什么」。发布构建这样打：
+
+    ```powershell
+    $env:RUSTFLAGS = "--remap-path-prefix=$env:USERPROFILE=C:\build"
+    pnpm.cmd tauri build --bundles nsis
+    ```
+
+    处理之后 `C:\Users\<用户名>` 归零，变成 `C:\build\...`。
+    注意两点：改 `RUSTFLAGS` 会触发**全量重编译**（实测约 4.5 分钟），所以只在正式发布时做；
+    而且这个值只放在命令行里，**不要写进 `.cargo/config.toml`**——那会把路径本身提交进仓库。
+    自测打包可以省略这一步。
 
 ---
 
