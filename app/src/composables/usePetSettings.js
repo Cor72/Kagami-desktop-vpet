@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
-import { getPetSettings, onPetSettingsChanged, setPetAlwaysOnTop, setPetMaxFps, setPetVisible } from '../api/pet.js'
+import { getPetSettings, onPetSettingsChanged, setPetAlwaysOnTop, setBrowserTitleEnabled, setPetMaxFps, setPetVisible, setProactiveEnabled } from '../api/pet.js'
 import { latestSettings } from './petSettings.js'
 
 // 两个窗口共享 Rust 状态；订阅先于初始读取，版本号避免旧快照覆盖新事件。
@@ -39,5 +39,9 @@ export function usePetSettings() {
     setVisible: visible => change(() => setPetVisible(visible)),
     setMaxFps: fps => change(() => setPetMaxFps(fps)),
     setAlwaysOnTop: enabled => change(() => setPetAlwaysOnTop(enabled)),
+    // 主动互动的开关同样走设置快照：落盘、广播、托盘一起生效，界面也不会慢半拍。
+    setProactiveEnabled: enabled => change(() => setProactiveEnabled(enabled)),
+    // 浏览器标题开关同一套路径。
+    setBrowserTitleEnabled: enabled => change(() => setBrowserTitleEnabled(enabled)),
   }
 }

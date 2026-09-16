@@ -1,5 +1,6 @@
 const rootItems = [
   { id: 'expressions', label: '表情', icon: 'smile', submenu: true },
+  { id: 'chat', label: '对话', icon: 'message-circle' },
   { id: 'settings', label: '设置', icon: 'settings' },
   { id: 'always-on-top', label: '置顶', icon: 'pin' },
   { id: 'hide', label: '隐藏', icon: 'eye-off' },

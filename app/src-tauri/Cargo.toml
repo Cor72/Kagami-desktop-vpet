@@ -11,10 +11,31 @@ tauri-build = { version = "=2.6.3", features = [] }
 
 [features]
 # 仅性能验收时启用，日常开发和发行不编译测量流程。
-perf-audit = ["dep:serde_json"]
+# （serde_json 现在是常规依赖：设置与后续的养成数据都要 JSON 落盘。）
+perf-audit = []
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", optional = true }
+serde_json = "1"
 tauri = { version = "=2.11.3", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-fs = "=2.5.2"
+# AI 对话：HTTP + SSE 流式读取。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+futures-util = "0.3"
+# CancellationToken：用户点「停止」时中断正在进行的流。
+tokio-util = "0.7"
+# API Key 存 Windows 凭据管理器。v3 起不再有默认后端，必须显式选平台实现。
+keyring = { version = "3", features = ["windows-native"] }
+# 主动互动：只读前台窗口的进程名 / 标题、空闲时长与全屏状态（见 context.rs）。
+# 版本号以本地已缓存的 0.61 为准（计划里写的 0.58 只是当时的占位）；
+# 特性列表只开实际用到的那几个模块，不开整套 Win32。
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+similar = "2"
+tauri-plugin-dialog = "2"

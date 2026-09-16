@@ -39,3 +39,18 @@ export const onPetSettingsChanged = handler =>
 
 export const onPetDesktopError = handler =>
   listen('pet-desktop-error', event => handler(event.payload))
+
+// ---------- 主动互动 ----------
+// 八千代自己开口的那一套。文案全在 Rust 侧的内置模板里，这一层只负责收发。
+
+export const getProactiveState = () => invoke('get_proactive_state')
+// 走的是 pet-settings 那套更新路径，所以返回的是完整设置快照。
+export const setProactiveEnabled = enabled => invoke('set_proactive_enabled', { enabled })
+// 浏览器标签页标题开关。单独一个而不是跟着总开关：用户可能希望桌宠照常陪着，
+// 但不希望它读浏览器标题（网银、公司内部系统、网页版聊天都在那条通道上）。
+export const setBrowserTitleEnabled = enabled => invoke('set_browser_title_enabled', { enabled })
+// 气泡消失时回报一句：acknowledged = 用户点了它（没点就算「被忽略」一次）。
+export const proactiveDismiss = (id, acknowledged) =>
+  invoke('proactive_dismiss', { id, acknowledged })
+export const onProactiveSpeak = handler =>
+  listen('proactive-speak', event => handler(event.payload))

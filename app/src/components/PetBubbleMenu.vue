@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowLeft, Droplet, EyeOff, Frown, Laugh, Pin, Power, Settings, Smile } from '@lucide/vue'
+import { ArrowLeft, Droplet, EyeOff, Frown, Laugh, MessageCircle, Pin, Power, Settings, Smile } from '@lucide/vue'
 import { getMenuItems } from '../composables/petMenu.js'
 
 const props = defineProps({
@@ -12,7 +12,7 @@ const emit = defineEmits(['select'])
 const menu = ref(null)
 const open = computed(() => props.state !== 'closed')
 const items = computed(() => getMenuItems(props.state))
-const icons = { 'arrow-left': ArrowLeft, droplet: Droplet, 'eye-off': EyeOff, frown: Frown, laugh: Laugh, pin: Pin, power: Power, settings: Settings, smile: Smile }
+const icons = { 'arrow-left': ArrowLeft, droplet: Droplet, 'eye-off': EyeOff, frown: Frown, laugh: Laugh, 'message-circle': MessageCircle, pin: Pin, power: Power, settings: Settings, smile: Smile }
 
 function focusFirst() { menu.value?.querySelector('button:not(:disabled)')?.focus({ preventScroll: true }) }
 // 文字不再常显，改为原生 title 悬浮提示；同时作为无障碍名称，常显的 aria-label 去掉。

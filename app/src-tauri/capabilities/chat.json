@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chat",
+  "description": "Allows the chat window to subscribe to streaming and config events. It deliberately gets no filesystem permissions: every file access goes through our own Rust commands, which re-validate paths on each call.",
+  "windows": ["chat"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-close"
+  ]
+}
