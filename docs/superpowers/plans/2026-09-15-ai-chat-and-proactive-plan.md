@@ -554,6 +554,11 @@ fn should_speak(signal: &Signal, state: &ProactiveState, now_ms: u64) -> Option<
     Tauri 的 `manage()` 第二次注册就崩。**每个阶段做完，必须真的把程序跑起来一次**
     （`pnpm.cmd tauri dev`），确认窗口出现、日志里有「启动时恢复设置」那一行，才算做完。
     「点鼠标只有用户能做」不是不启动程序的理由。
+13. **`cargo clippy -D warnings` 干净 ≠ release 构建干净。** clippy 默认跑的是 debug 配置，
+    而只在 `#[cfg(debug_assertions)]`（开发日志那类）里用到的变量与函数，**发布构建下会变成
+    unused / dead_code 并报警告**。打包时才发现过一次（`ai/agent.rs` 的轮次变量、
+    `proactive.rs` 的两个 `label()`）。
+    **打包是唯一能发现这类问题的步骤**，所以「第四阶段：打包」不是可选项。
 
 ---
 

@@ -136,6 +136,11 @@ pub async fn run(
     let mut text = String::new();
 
     for round in 0..MAX_ROUNDS {
+        // 轮次只在开发日志里用得到。发布构建下显式忽略，免得报 unused variable——
+        // 这类警告只在 `tauri build`（release 配置）里出现，`cargo clippy` 是 debug 配置，抓不到。
+        #[cfg(not(debug_assertions))]
+        let _ = round;
+
         let stream = match provider::open_stream(&client, &config.model, &messages, &specs).await {
             Ok(stream) => stream,
             Err(error) => {

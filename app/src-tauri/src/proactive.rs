@@ -77,6 +77,8 @@ impl Category {
         }
     }
 
+    /// 分类的中文名。**只在开发日志里用**——发布构建下允许它「没人调用」。
+    #[cfg_attr(not(debug_assertions), allow(dead_code))]
     fn label(self) -> &'static str {
         match self {
             Category::Editor => "代码编辑器",
@@ -327,6 +329,8 @@ pub struct AppMatch {
 }
 
 impl AppMatch {
+    /// 分类的中文名。**只在开发日志里用**（见 `log_process_change`）。
+    #[cfg_attr(not(debug_assertions), allow(dead_code))]
     fn label(&self) -> &'static str {
         self.rule.category.label()
     }
