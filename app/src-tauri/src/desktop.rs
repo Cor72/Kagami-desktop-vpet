@@ -1,7 +1,12 @@
 use crate::settings::{self, PetSettings, PetState, SettingsChange};
 use crate::{broadcast, tray};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Window, WindowEvent};
+
+const COMPACT_WINDOW_WIDTH: f64 = 340.0;
+const WIDE_WINDOW_WIDTH: f64 = 520.0;
+const PET_WINDOW_HEIGHT: f64 = 480.0;
+const WIDE_MONITOR_MIN_WIDTH: u32 = 2560;
 
 #[derive(Debug, PartialEq, serde::Serialize)]
 pub struct CursorPosition {
@@ -18,6 +23,38 @@ fn logical_cursor_position(
         x: (cursor.x - f64::from(origin.x)) / scale,
         y: (cursor.y - f64::from(origin.y)) / scale,
     }
+}
+
+fn pet_window_width(monitor_physical_width: u32) -> f64 {
+    if monitor_physical_width >= WIDE_MONITOR_MIN_WIDTH {
+        WIDE_WINDOW_WIDTH
+    } else {
+        COMPACT_WINDOW_WIDTH
+    }
+}
+
+pub fn sync_pet_window_size(window: &WebviewWindow) -> Result<(), String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or(window
+            .primary_monitor()
+            .map_err(|error| error.to_string())?);
+    let Some(monitor) = monitor else {
+        return Ok(());
+    };
+
+    let target_width = pet_window_width(monitor.size().width);
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let current = window.inner_size().map_err(|error| error.to_string())?;
+    let current_logical_width = f64::from(current.width) / scale;
+    if (current_logical_width - target_width).abs() < 0.5 {
+        return Ok(());
+    }
+
+    window
+        .set_size(tauri::LogicalSize::new(target_width, PET_WINDOW_HEIGHT))
+        .map_err(|error| error.to_string())
 }
 
 pub fn get_cursor_position(window: &tauri::WebviewWindow) -> Result<CursorPosition, String> {
@@ -175,6 +212,14 @@ pub fn on_page_load(
         return;
     }
     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+        if let Some(window) = webview.app_handle().get_webview_window("main") {
+            if let Err(error) = sync_pet_window_size(&window) {
+                report_startup_error(
+                    webview.app_handle(),
+                    &format!("按显示器调整桌宠窗口失败：{error}"),
+                );
+            }
+        }
         #[cfg(debug_assertions)]
         println!("[Rust] 主窗口页面加载完成");
         flush_startup_notices(webview.app_handle());
@@ -192,6 +237,19 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
     if window.label() != "main" {
         return;
+    }
+    if matches!(
+        event,
+        WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. }
+    ) {
+        if let Some(webview_window) = window.app_handle().get_webview_window("main") {
+            if let Err(error) = sync_pet_window_size(&webview_window) {
+                report_error(
+                    window.app_handle(),
+                    &format!("按显示器调整桌宠窗口失败：{error}"),
+                );
+            }
+        }
     }
     // Windows 最小化/还原会触发尺寸事件；这里只报告真实最小化状态。
     // 不读取 PetState 的锁，避免与正在执行的窗口操作互相等待。
@@ -220,6 +278,14 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pet_window_width_uses_monitor_physical_resolution() {
+        assert_eq!(pet_window_width(1920), 340.0);
+        assert_eq!(pet_window_width(2559), 340.0);
+        assert_eq!(pet_window_width(2560), 520.0);
+        assert_eq!(pet_window_width(3840), 520.0);
+    }
 
     #[test]
     fn cursor_uses_client_origin_and_monitor_scale() {

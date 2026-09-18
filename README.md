@@ -155,7 +155,7 @@ pnpm tauri dev
 
 - 气泡固定显示 5 秒后淡出，点它立刻关闭；同一时刻只有一条，新的直接替换旧的；
 - 与气泡菜单互斥：菜单打开时不显示气泡；
-- **不改变桌宠窗口尺寸**（340×440 是硬约束），它只是窗口内的一块普通 DOM；
+- **不改变桌宠窗口尺寸**，它只是窗口内的一块普通 DOM；窗口宽度由当前显示器自动选择；
 - 刚启动时不说话：第一帧只用来建立基线，否则一开机就会「报告」你正在做什么；
 - 关掉开关后 Rust 侧连前台窗口都不读；设置窗口的开关跟着 `settings.json` 落盘。
 
@@ -420,7 +420,7 @@ node scripts/summarize-performance.mjs ../docs/performance/my-run
 
 这些都是**当前真实存在的状态**，不是待办清单里的设想：
 
-1. **窗口尺寸有三个来源，需要手动保持一致**：`tauri.conf.json` 的 `width`/`height`（340×480）、`style.css` 的 `.pet-anchor`（340×440）、`style.css` 的 `.pet-view`（394px）。改窗口尺寸要同时改这三处，另外开发模式还有 `.development-stage .pet-view`（368px）。
+1. **主窗口宽度按显示器自动切换**：物理宽度低于 2560px 时为 340×480（Canvas 324px 宽），达到 2560px 时为 520×480（Canvas 504px 宽）。Rust 在启动、跨屏移动和 DPI 变化时更新原生窗口；CSS 的 `.pet-anchor` 使用 `width: 100%` 跟随窗口。高度仍由 `.pet-anchor`（440px）、`.pet-view`（394px）和开发模式 `.development-stage .pet-view`（368px）共同约束。
 2. **模型缩放是硬编码的**：`live2d/controller.js` 里 `modelZoom = 4` 与 `model.position.set(layout.x, layout.y + 140)`。窗口尺寸变化时 `fitModel` 会重算缩放并把模型居中，`+140` 的偏移因此是脆弱的。
 3. **Rust 侧的 `menu_layout.rs` 已被删除**，但 `tauri.conf.json` 里仍有与之对应的历史痕迹；菜单相关的窗口几何逻辑现在完全不存在。
 4. **`csp` 为 `null`**（`tauri.conf.json`）。当前应用纯本地、无外联，风险可控；公开发布前建议收紧。
