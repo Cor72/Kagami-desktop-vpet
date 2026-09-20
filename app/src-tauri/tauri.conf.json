@@ -34,7 +34,7 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "resources": ["assets/models/yachiyo/"],
     "icon": [
       "icons/icon.ico"
